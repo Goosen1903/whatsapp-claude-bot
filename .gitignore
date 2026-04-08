@@ -1,3 +1,6 @@
 node_modules/
 .env
-public/images/*.png
+public/images/
+public/pdfs/
+documents/
+.DS_Store

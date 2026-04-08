@@ -6,6 +6,7 @@ const require = createRequire(import.meta.url);
 const { PDFParse } = require("pdf-parse");
 
 const IMAGES_DIR = "./public/images";
+const PDFS_DIR = "./public/pdfs";
 let chunks = [];
 
 function splitIntoChunks(text, size = 150, overlap = 20) {
@@ -72,7 +73,8 @@ export async function getPageScreenshot(filePath, pageNum) {
 export async function loadDocuments() {
   const dir = "./documents";
   if (!fs.existsSync(dir)) fs.mkdirSync(dir);
-  if (!fs.existsSync(IMAGES_DIR)) fs.mkdirSync(IMAGES_DIR, { recursive: true });
+  fs.mkdirSync(IMAGES_DIR, { recursive: true });
+  fs.mkdirSync(PDFS_DIR, { recursive: true });
 
   const files = findAllPDFs(dir);
   console.log(`Loading ${files.length} PDF(s)...`);
@@ -81,6 +83,9 @@ export async function loadDocuments() {
   for (const filePath of files) {
     const fileName = path.basename(filePath);
     try {
+      // Copy PDF to public/pdfs so it can be linked to
+      fs.copyFileSync(filePath, path.join(PDFS_DIR, fileName));
+
       const pages = await parsePDFPages(filePath);
       for (const { pageIndex, text } of pages) {
         splitIntoChunks(text).forEach((chunk) =>
