@@ -1,5 +1,6 @@
 import express from "express";
 import Anthropic from "@anthropic-ai/sdk";
+import fs from "fs";
 import { loadDocuments, searchChunks, getPageScreenshot } from "./rag.js";
 import { ensurePDFs } from "./download-pdfs.js";
 import "dotenv/config";
@@ -21,6 +22,14 @@ const PUBLIC_URL = process.env.PUBLIC_URL || "http://localhost:3000";
 
 const conversations = {};
 const webConversations = {};
+
+const ANALYTICS_FILE = "./documents/analytics.jsonl";
+const ANALYTICS_PASSWORD = process.env.ANALYTICS_PASSWORD || "readyrobotics";
+
+function logQuery(source, question, answerable) {
+  const entry = JSON.stringify({ ts: new Date().toISOString(), source, question, answerable }) + "\n";
+  fs.appendFile(ANALYTICS_FILE, entry, () => {});
+}
 
 const RATE_LIMIT = 20;
 const RATE_WINDOW_MS = 60 * 60 * 1000;
@@ -119,11 +128,44 @@ ${context}`,
 
     const reply = response.content[0].text;
     webConversations[sessionId].push({ role: "assistant", content: reply });
+    const answerable = !reply.toLowerCase().includes("don't have") && !reply.toLowerCase().includes("ikke har");
+    logQuery("web", message, answerable);
     res.json({ reply });
   } catch (err) {
     console.error("[CHAT ERROR]", err);
     res.status(500).json({ error: "Failed to process message" });
   }
+});
+
+app.get("/analytics", (req, res) => {
+  if (req.query.password !== ANALYTICS_PASSWORD) return res.status(401).send("Unauthorized");
+  if (!fs.existsSync(ANALYTICS_FILE)) return res.send("<h2>No data yet.</h2>");
+
+  const lines = fs.readFileSync(ANALYTICS_FILE, "utf8").trim().split("\n").filter(Boolean);
+  const entries = lines.map(l => { try { return JSON.parse(l); } catch { return null; } }).filter(Boolean);
+
+  const total = entries.length;
+  const unanswered = entries.filter(e => !e.answerable).length;
+  const bySource = entries.reduce((acc, e) => { acc[e.source] = (acc[e.source] || 0) + 1; return acc; }, {});
+  const recent = entries.slice(-50).reverse();
+
+  res.send(`<!DOCTYPE html><html><head><title>Analytics</title>
+  <style>body{font-family:sans-serif;max-width:900px;margin:40px auto;padding:0 20px;color:#1a1a1a}
+  h1{color:#1B2563}table{width:100%;border-collapse:collapse;margin-top:16px}
+  th{background:#1B2563;color:#fff;padding:10px;text-align:left}
+  td{padding:8px 10px;border-bottom:1px solid #eee}tr:hover td{background:#f5f5f5}
+  .stat{display:inline-block;background:#f1f3f8;border-radius:8px;padding:16px 24px;margin:8px;text-align:center}
+  .stat strong{display:block;font-size:28px;color:#1B2563}</style></head>
+  <body><h1>Ready Robotics Chat Analytics</h1>
+  <div>
+    <div class="stat"><strong>${total}</strong>Total questions</div>
+    <div class="stat"><strong>${unanswered}</strong>Unanswered</div>
+    <div class="stat"><strong>${Object.entries(bySource).map(([k,v])=>`${k}: ${v}`).join(", ")}</strong>By source</div>
+  </div>
+  <h2>Recent questions</h2>
+  <table><tr><th>Time</th><th>Source</th><th>Question</th><th>Answered</th></tr>
+  ${recent.map(e => `<tr><td>${new Date(e.ts).toLocaleString("no-NO")}</td><td>${e.source}</td><td>${e.question}</td><td>${e.answerable ? "✅" : "❌"}</td></tr>`).join("")}
+  </table></body></html>`);
 });
 
 async function extractSearchKeywords(text) {
@@ -209,6 +251,8 @@ ${context}`,
   const reply = response.content[0].text;
   console.log(`[REPLY] ${reply.slice(0, 100)}...`);
   conversations[from].push({ role: "assistant", content: reply });
+  const answerable = !reply.toLowerCase().includes("don't have") && !reply.toLowerCase().includes("ikke har");
+  logQuery("whatsapp", userText, answerable);
 
   const waRes = await fetch(
     `https://graph.facebook.com/v19.0/${PHONE_NUMBER_ID}/messages`,
