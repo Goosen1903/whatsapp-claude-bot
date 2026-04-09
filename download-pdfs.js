@@ -31,7 +31,11 @@ export async function ensurePDFs() {
 
   const missing = PDFS.filter(([local]) => {
     const p = path.join(DOCS_DIR, local);
-    return !fs.existsSync(p) || fs.statSync(p).size === 0;
+    if (!fs.existsSync(p)) return true;
+    const size = fs.statSync(p).size;
+    // LFS pointer files are tiny (~130 bytes) — treat as missing
+    if (size < 1000) { fs.unlinkSync(p); return true; }
+    return false;
   });
   if (missing.length === 0) {
     console.log("PDFs already present.");
