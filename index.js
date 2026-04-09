@@ -1,6 +1,7 @@
 import express from "express";
 import Anthropic from "@anthropic-ai/sdk";
 import { loadDocuments, searchChunks, getPageScreenshot } from "./rag.js";
+import { ensurePDFs } from "./download-pdfs.js";
 import "dotenv/config";
 
 const app = express();
@@ -179,6 +180,7 @@ ${context}`,
 
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, async () => {
+  await ensurePDFs();
   await loadDocuments();
-  console.log("✅ Bot is running on port 3000");
+  console.log(`✅ Bot is running on port ${PORT}`);
 });
