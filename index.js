@@ -22,6 +22,19 @@ const PUBLIC_URL = process.env.PUBLIC_URL || "http://localhost:3000";
 const conversations = {};
 const webConversations = {};
 
+const RATE_LIMIT = 20;
+const RATE_WINDOW_MS = 60 * 60 * 1000;
+const rateLimits = {};
+
+function isRateLimited(sessionId) {
+  const now = Date.now();
+  if (!rateLimits[sessionId]) rateLimits[sessionId] = [];
+  rateLimits[sessionId] = rateLimits[sessionId].filter(t => now - t < RATE_WINDOW_MS);
+  if (rateLimits[sessionId].length >= RATE_LIMIT) return true;
+  rateLimits[sessionId].push(now);
+  return false;
+}
+
 app.get("/webhook", (req, res) => {
   const mode = req.query["hub.mode"];
   const token = req.query["hub.verify_token"];
@@ -62,6 +75,7 @@ app.post("/chat", async (req, res) => {
   res.setHeader("Access-Control-Allow-Headers", "Content-Type");
   const { message, sessionId } = req.body;
   if (!message || !sessionId) return res.status(400).json({ error: "Missing message or sessionId" });
+  if (isRateLimited(sessionId)) return res.status(429).json({ error: "Too many messages. Please wait before sending more." });
 
   try {
     const searchQuery = await extractSearchKeywords(message);

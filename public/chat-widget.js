@@ -156,7 +156,9 @@
       });
       const data = await res.json();
       typing.remove();
-      const reply = data.reply || "Sorry, something went wrong.";
+      const reply = res.status === 429
+        ? "You've sent too many messages. Please wait a while before trying again."
+        : data.reply || "Sorry, something went wrong.";
       appendMessage("bot", reply);
       history.push({ role: "bot", text: reply });
       saveHistory(history);
