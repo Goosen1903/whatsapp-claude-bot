@@ -20,6 +20,7 @@ const PHONE_NUMBER_ID = process.env.PHONE_NUMBER_ID;
 const PUBLIC_URL = process.env.PUBLIC_URL || "http://localhost:3000";
 
 const conversations = {};
+const webConversations = {};
 
 app.get("/webhook", (req, res) => {
   const mode = req.query["hub.mode"];
@@ -48,6 +49,67 @@ app.post("/webhook", (req, res) => {
   processMessage(from, userText).catch((err) =>
     console.error(`Failed to process message from ${from}:`, err)
   );
+});
+
+app.options("/chat", (_req, res) => {
+  res.setHeader("Access-Control-Allow-Origin", "*");
+  res.setHeader("Access-Control-Allow-Headers", "Content-Type");
+  res.sendStatus(204);
+});
+
+app.post("/chat", async (req, res) => {
+  res.setHeader("Access-Control-Allow-Origin", "*");
+  res.setHeader("Access-Control-Allow-Headers", "Content-Type");
+  const { message, sessionId } = req.body;
+  if (!message || !sessionId) return res.status(400).json({ error: "Missing message or sessionId" });
+
+  try {
+    const searchQuery = await extractSearchKeywords(message);
+    const relevantChunks = searchChunks(searchQuery);
+    const context = relevantChunks.length > 0
+      ? relevantChunks.map((c) => `[From: ${c.source}, page ${c.page}]\n${c.text}`).join("\n\n")
+      : "No relevant documents found.";
+
+    if (!webConversations[sessionId]) webConversations[sessionId] = [];
+    webConversations[sessionId].push({ role: "user", content: message });
+    const history = webConversations[sessionId].slice(-10);
+
+    const response = await anthropic.messages.create({
+      model: "claude-sonnet-4-6",
+      max_tokens: 1024,
+      system: `You are a technical support assistant for Ready Robotics, a reseller of Gausium autonomous cleaning robots (Mira, Omnie, Scrubber 50, and Phantas models).
+
+LANGUAGE RULE (most important rule): Always reply in the exact same language as the user's most recent message. If their latest message is in Norwegian, reply in Norwegian. If English, reply in English. Never switch languages mid-conversation.
+
+ANSWERING:
+- Answer using ONLY the information in the context below from our official manuals.
+- If the answer is partially in the context, give what you can and say what you don't have.
+- If the answer is not in the context at all, say so clearly and advise the user to contact Ready Robotics support: info@readyrobotics.no or call 40282444.
+- For step-by-step tasks (setup, maintenance, troubleshooting), use numbered steps.
+- Be concise but complete — don't leave out important steps.
+- Always end your answer with a source reference on its own line in exactly this format:
+  (Source: FILENAME, page PAGE_NUMBER)
+  Followed immediately by the direct link on the next line:
+  ${PUBLIC_URL}/pdfs/FILENAME#page=PAGE_NUMBER
+  Replace FILENAME with the exact filename from the context tag, and PAGE_NUMBER with the page number.
+
+FORMATTING:
+- Plain text only, no markdown, no asterisks, no bullet symbols.
+- Use numbered steps for procedures.
+- Keep replies under 300 words unless a procedure genuinely requires more.
+
+CONTEXT FROM MANUALS:
+${context}`,
+      messages: history,
+    });
+
+    const reply = response.content[0].text;
+    webConversations[sessionId].push({ role: "assistant", content: reply });
+    res.json({ reply });
+  } catch (err) {
+    console.error("[CHAT ERROR]", err);
+    res.status(500).json({ error: "Failed to process message" });
+  }
 });
 
 async function extractSearchKeywords(text) {
