@@ -33,8 +33,8 @@ export async function ensurePDFs() {
     const p = path.join(DOCS_DIR, local);
     if (!fs.existsSync(p)) return true;
     const size = fs.statSync(p).size;
-    // LFS pointer files are tiny (~130 bytes) — treat as missing
-    if (size < 1000) { fs.unlinkSync(p); return true; }
+    // Files under 5MB are likely corrupted partial downloads — re-download
+    if (size < 5_000_000) { fs.unlinkSync(p); return true; }
     return false;
   });
   if (missing.length === 0) {
