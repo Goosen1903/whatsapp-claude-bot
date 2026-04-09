@@ -1,5 +1,7 @@
 import fs from "fs";
 import path from "path";
+import { pipeline } from "stream/promises";
+import { Readable } from "stream";
 
 const DOCS_DIR = "./documents";
 const BASE_URL = "https://github.com/Goosen1903/whatsapp-claude-bot/releases/download/v1.0";
@@ -27,7 +29,10 @@ const PDFS = [
 export async function ensurePDFs() {
   fs.mkdirSync(DOCS_DIR, { recursive: true });
 
-  const missing = PDFS.filter(([local]) => !fs.existsSync(path.join(DOCS_DIR, local)));
+  const missing = PDFS.filter(([local]) => {
+    const p = path.join(DOCS_DIR, local);
+    return !fs.existsSync(p) || fs.statSync(p).size === 0;
+  });
   if (missing.length === 0) {
     console.log("PDFs already present.");
     return;
@@ -40,8 +45,7 @@ export async function ensurePDFs() {
     try {
       const res = await fetch(url);
       if (!res.ok) throw new Error(`HTTP ${res.status} from ${url}`);
-      const buf = await res.arrayBuffer();
-      fs.writeFileSync(dest, Buffer.from(buf));
+      await pipeline(Readable.fromWeb(res.body), fs.createWriteStream(dest));
       console.log(`  ✓ ${localName}`);
     } catch (err) {
       console.error(`  ✗ Failed to download ${localName}: ${err.message}`);
