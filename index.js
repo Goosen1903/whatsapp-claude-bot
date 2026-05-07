@@ -105,7 +105,7 @@ app.post("/chat", async (req, res) => {
 
     if (!webConversations[sessionId]) webConversations[sessionId] = [];
     webConversations[sessionId].push({ role: "user", content: message });
-    const history = webConversations[sessionId].slice(-10);
+    const history = webConversations[sessionId].slice(-6);
 
     const response = await anthropic.messages.create({
       model: "claude-sonnet-4-6",
@@ -239,7 +239,7 @@ async function processMessage(from, userText) {
   if (!conversations[from]) conversations[from] = [];
   conversations[from].push({ role: "user", content: userText });
 
-  const history = conversations[from].slice(-10);
+  const history = conversations[from].slice(-6);
 
   const response = await anthropic.messages.create({
     model: "claude-sonnet-4-6",
