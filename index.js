@@ -22,6 +22,7 @@ const PUBLIC_URL = process.env.PUBLIC_URL || "http://localhost:3000";
 
 const conversations = {};
 const webConversations = {};
+const sessionModels = {};
 
 const ANALYTICS_FILE = "./documents/analytics.jsonl";
 const ANALYTICS_PASSWORD = process.env.ANALYTICS_PASSWORD || "readyrobotics";
@@ -86,10 +87,10 @@ app.post("/chat", async (req, res) => {
   if (!message || !sessionId) return res.status(400).json({ error: "Missing message or sessionId" });
   if (isRateLimited(sessionId)) return res.status(429).json({ error: "Too many messages. Please wait before sending more." });
 
-  // Silent messages (e.g. model selection) — store in history but don't reply
+  // Silent messages (e.g. model selection) — store model and don't reply
   if (silent) {
-    if (!webConversations[sessionId]) webConversations[sessionId] = [];
-    webConversations[sessionId].push({ role: "user", content: message });
+    const modelMatch = message.match(/Jeg bruker (.+)\./);
+    if (modelMatch) sessionModels[sessionId] = modelMatch[1].trim();
     return res.json({ silent: true });
   }
 
@@ -107,17 +108,18 @@ app.post("/chat", async (req, res) => {
     webConversations[sessionId].push({ role: "user", content: message });
     const history = webConversations[sessionId].slice(-6);
 
+    const selectedModel = sessionModels[sessionId];
     const response = await anthropic.messages.create({
       model: "claude-sonnet-4-6",
       max_tokens: 1024,
       system: `You are a friendly and knowledgeable support assistant for Ready Robotics, a Norwegian reseller of Gausium autonomous cleaning robots (Mira, Omnie, Scrubber 50, and Phantas models).
-
+${selectedModel ? `\nSELECTED MODEL: The user has selected "${selectedModel}" at the start of this session. Always treat all questions as being about ${selectedModel} unless the user explicitly asks about a different model.\n` : ""}
 LANGUAGE RULE (most important rule): Always reply in the exact same language as the user's most recent message. If Norwegian, reply in Norwegian. If English, reply in English.
 
 ROBOT MODEL RULE (critical):
 - The product range includes: Omnie, Phantas, Scrubber 50 (SC50), Mira, and Beetle. These are distinct robots with different specs and parameters.
-- If the user has not specified which robot model they are asking about, you MUST ask before answering. Do not guess or answer for multiple models at once.
-- If the user says "roboten", "maskinen", "the robot" or similar without naming a model, always ask: which model are you using?
+- If a selected model is specified above, use it for all questions — do NOT ask which model they are using.
+- If no model is selected and the user says "roboten", "maskinen", "the robot" or similar, ask: which model are you using?
 - If the user specifies a model (e.g. "Omnie"), answer ONLY using context tagged with that model's manuals. Do NOT include information from other models' manuals unless it explicitly states it applies to all models.
 - If the context contains information for the wrong model, ignore it and say you don't have model-specific information.
 
