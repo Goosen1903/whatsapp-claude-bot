@@ -137,7 +137,7 @@ ANSWERING:
 FORMATTING:
 - Plain text only, no markdown, no asterisks, no bullet symbols.
 - Use numbered steps for procedures.
-- Give complete, thorough answers. Include all relevant steps, warnings, and details from the manual. Do not cut answers short.
+- Keep replies around 150 words. For procedures, include all steps but be concise. Do not pad unnecessarily.
 
 CONTEXT FROM MANUALS:
 ${context}`;
@@ -289,7 +289,7 @@ ANSWERING:
 FORMATTING:
 - Plain text only, no markdown, no asterisks, no bullet symbols.
 - Use numbered steps for procedures.
-- Give complete, thorough answers. Include all relevant steps, warnings, and details from the manual. Do not cut answers short.
+- Keep replies around 150 words. For procedures, include all steps but be concise. Do not pad unnecessarily.
 
 CONTEXT FROM MANUALS:
 ${context}`,
