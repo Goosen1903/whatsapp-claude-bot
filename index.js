@@ -109,10 +109,7 @@ app.post("/chat", async (req, res) => {
     const history = webConversations[sessionId].slice(-6);
 
     const selectedModel = sessionModels[sessionId];
-    const response = await anthropic.messages.create({
-      model: "claude-sonnet-4-6",
-      max_tokens: 1024,
-      system: `You are a friendly and knowledgeable support assistant for Ready Robotics, a Norwegian reseller of Gausium autonomous cleaning robots (Mira, Omnie, Scrubber 50, and Phantas models).
+    const systemPrompt = `You are a friendly and knowledgeable support assistant for Ready Robotics, a Norwegian reseller of Gausium autonomous cleaning robots (Mira, Omnie, Scrubber 50, and Phantas models).
 ${selectedModel ? `\nSELECTED MODEL: The user has selected "${selectedModel}" at the start of this session. Always treat all questions as being about ${selectedModel} unless the user explicitly asks about a different model.\n` : ""}
 LANGUAGE RULE (most important rule): Always reply in the exact same language as the user's most recent message. If Norwegian, reply in Norwegian. If English, reply in English.
 
@@ -143,18 +140,36 @@ FORMATTING:
 - Keep replies under 300 words unless a procedure genuinely requires more.
 
 CONTEXT FROM MANUALS:
-${context}`,
+${context}`;
+
+    // Stream response to client
+    res.setHeader("Content-Type", "text/event-stream");
+    res.setHeader("Cache-Control", "no-cache");
+    res.setHeader("X-Accel-Buffering", "no");
+
+    let reply = "";
+    const stream = anthropic.messages.stream({
+      model: "claude-sonnet-4-6",
+      max_tokens: 1024,
+      system: systemPrompt,
       messages: history,
     });
 
-    const reply = response.content[0].text;
+    stream.on("text", (text) => {
+      reply += text;
+      res.write(`data: ${JSON.stringify({ text })}\n\n`);
+    });
+
+    await stream.finalMessage();
+    res.write("data: [DONE]\n\n");
+    res.end();
+
     webConversations[sessionId].push({ role: "assistant", content: reply });
     const answerable = !reply.toLowerCase().includes("don't have") && !reply.toLowerCase().includes("ikke har");
     logQuery("web", message, answerable);
-    res.json({ reply });
   } catch (err) {
     console.error("[CHAT ERROR]", err);
-    res.status(500).json({ error: "Failed to process message" });
+    if (!res.headersSent) res.status(500).json({ error: "Failed to process message" });
   }
 });
 

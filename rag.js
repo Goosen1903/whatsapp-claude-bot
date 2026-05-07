@@ -227,10 +227,15 @@ export function searchChunks(query, topN = 15) {
 
   const scored = chunks.map((chunk) => {
     const chunkLower = chunk.text.toLowerCase();
-    let score = queryWords.reduce(
-      (acc, word) => acc + (chunkLower.includes(word) ? 1 : 0),
-      0
-    );
+    let score = queryWords.reduce((acc, word) => {
+      if (chunkLower.includes(word)) return acc + 1;
+      // Prefix match for longer words — handles morphology ("charg" matches "charging", "charger")
+      if (word.length > 4) {
+        const stem = word.slice(0, Math.ceil(word.length * 0.75));
+        if (new RegExp(`\\b${stem}`).test(chunkLower)) return acc + 0.5;
+      }
+      return acc;
+    }, 0);
     // Boost chunks from the detected model's documents
     if (detectedModel && chunk.source.toLowerCase().includes(detectedModel)) {
       score *= 2;

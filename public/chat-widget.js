@@ -374,7 +374,7 @@
     appendMessage("user", text);
     history.push({ role: "user", text });
 
-    const typing = appendMessage("bot typing", "Typing...");
+    const typing = appendMessage("bot typing", "...");
 
     try {
       const res = await fetch(API_URL, {
@@ -382,17 +382,54 @@
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ message: text, sessionId }),
       });
-      const data = await res.json();
+
+      if (res.status === 429) {
+        typing.remove();
+        appendMessage("bot", "Du har sendt for mange meldinger. Vent litt før du prøver igjen.");
+        sendBtn.disabled = false;
+        input.focus();
+        return;
+      }
+
+      // Handle streaming response
       typing.remove();
-      const reply = res.status === 429
-        ? "You've sent too many messages. Please wait a while before trying again."
-        : data.reply || "Sorry, something went wrong.";
-      appendMessage("bot", reply);
-      history.push({ role: "bot", text: reply });
+      const streamDiv = document.createElement("div");
+      streamDiv.className = "rr-msg bot";
+      messages.appendChild(streamDiv);
+
+      const reader = res.body.getReader();
+      const decoder = new TextDecoder();
+      let fullReply = "";
+      let buffer = "";
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        buffer += decoder.decode(value, { stream: true });
+        const lines = buffer.split("\n");
+        buffer = lines.pop();
+        for (const line of lines) {
+          if (!line.startsWith("data: ")) continue;
+          const data = line.slice(6).trim();
+          if (data === "[DONE]") break;
+          try {
+            const { text: chunk } = JSON.parse(data);
+            fullReply += chunk;
+            const safe = fullReply.replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;");
+            streamDiv.innerHTML = linkify(safe);
+            messages.scrollTop = messages.scrollHeight;
+          } catch {}
+        }
+      }
+
+      // After streaming, re-render with follow-up question detection
+      streamDiv.remove();
+      appendMessage("bot", fullReply);
+      history.push({ role: "bot", text: fullReply });
       saveHistory(history);
     } catch {
       typing.remove();
-      appendMessage("bot", "Sorry, I couldn't reach the server. Please try again.");
+      appendMessage("bot", "Kunne ikke nå serveren. Prøv igjen.");
     }
 
     sendBtn.disabled = false;
