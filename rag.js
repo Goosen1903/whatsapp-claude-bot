@@ -215,18 +215,40 @@ export async function loadWebSources() {
   }
 }
 
-export function searchChunks(query, topN = 8) {
-  const queryWords = query.toLowerCase().split(/\s+/);
+const STOP_WORDS = new Set(["the","and","for","how","do","i","a","an","is","are","to","of","in","on","at","it","this","that","with","what","when","where","why","can","jeg","er","det","en","et","og","på","av","til","med","som","har","ikke","den","de","å","i","om","så","men","fra","eller"]);
+
+export function searchChunks(query, topN = 15) {
+  const queryWords = query.toLowerCase().split(/\s+/).filter(w => w.length > 2 && !STOP_WORDS.has(w));
+  if (queryWords.length === 0) return [];
+
+  // Detect robot model in query for boosting
+  const modelKeywords = { omnie: "omnie", phantas: "phantas", scrubber: "scrubber", sc50: "scrubber", mira: "mira", beetle: "beetle" };
+  const detectedModel = Object.entries(modelKeywords).find(([k]) => query.toLowerCase().includes(k))?.[1];
+
   const scored = chunks.map((chunk) => {
     const chunkLower = chunk.text.toLowerCase();
-    const score = queryWords.reduce(
+    let score = queryWords.reduce(
       (acc, word) => acc + (chunkLower.includes(word) ? 1 : 0),
       0
     );
+    // Boost chunks from the detected model's documents
+    if (detectedModel && chunk.source.toLowerCase().includes(detectedModel)) {
+      score *= 2;
+    }
     return { ...chunk, score };
   });
-  return scored
-    .filter((c) => c.score > 0)
-    .sort((a, b) => b.score - a.score)
-    .slice(0, topN);
+
+  const relevant = scored.filter((c) => c.score > 0).sort((a, b) => b.score - a.score);
+  if (relevant.length === 0) return [];
+
+  // Always include all chunks from the top-scoring source document (in page order)
+  const topSource = relevant[0].source;
+  const topSourceChunks = scored
+    .filter(c => c.source === topSource && c.score > 0)
+    .sort((a, b) => a.page - b.page);
+
+  // Fill remaining slots with high-scoring chunks from other sources
+  const otherChunks = relevant.filter(c => c.source !== topSource).slice(0, topN - topSourceChunks.length);
+
+  return [...topSourceChunks, ...otherChunks];
 }
