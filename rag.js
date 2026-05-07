@@ -4,6 +4,54 @@ import { pathToFileURL } from "url";
 import { createRequire } from "module";
 const require = createRequire(import.meta.url);
 const { PDFParse } = require("pdf-parse");
+const XLSX = require("xlsx");
+
+const WEB_SOURCES_FILE = "./web-sources.json";
+
+function htmlToText(html) {
+  return html
+    .replace(/<script[\s\S]*?<\/script>/gi, "")
+    .replace(/<style[\s\S]*?<\/style>/gi, "")
+    .replace(/<[^>]+>/g, " ")
+    .replace(/&nbsp;/g, " ")
+    .replace(/&amp;/g, "&")
+    .replace(/&lt;/g, "<")
+    .replace(/&gt;/g, ">")
+    .replace(/&quot;/g, '"')
+    .replace(/&#39;/g, "'")
+    .replace(/\s{2,}/g, " ")
+    .trim();
+}
+
+async function fetchWebSource(name, url) {
+  // Try direct fetch first (works for static pages)
+  try {
+    const res = await fetch(url, {
+      headers: {
+        "User-Agent": "Mozilla/5.0 (compatible; ReadyRoboticsBot/1.0)",
+        "Accept": "text/html,application/xhtml+xml",
+      },
+      signal: AbortSignal.timeout(15000),
+    });
+    if (res.ok) {
+      const html = await res.text();
+      const text = htmlToText(html);
+      if (text.length >= 500) return text;
+    }
+  } catch (_) {}
+
+  // Fallback: Jina AI reader for JS-rendered pages (free, no API key needed)
+  console.log(`  → Direct fetch insufficient for "${name}", trying Jina AI reader...`);
+  const jinaUrl = `https://r.jina.ai/${url}`;
+  const res = await fetch(jinaUrl, {
+    headers: { "Accept": "text/plain" },
+    signal: AbortSignal.timeout(30000),
+  });
+  if (!res.ok) throw new Error(`Jina HTTP ${res.status}`);
+  const text = await res.text();
+  if (text.length < 200) throw new Error("Jina returned insufficient content");
+  return text;
+}
 
 const IMAGES_DIR = "./public/images";
 const PDFS_DIR = "./public/pdfs";
@@ -19,19 +67,45 @@ function splitIntoChunks(text, size = 150, overlap = 20) {
   return result;
 }
 
-function findAllPDFs(dir) {
+function findAllFiles(dir, extensions) {
   let results = [];
   const items = fs.readdirSync(dir);
   for (const item of items) {
     const fullPath = path.join(dir, item);
     const stat = fs.statSync(fullPath);
     if (stat.isDirectory()) {
-      results = results.concat(findAllPDFs(fullPath));
-    } else if (item.endsWith(".pdf")) {
+      results = results.concat(findAllFiles(fullPath, extensions));
+    } else if (extensions.some((ext) => item.toLowerCase().endsWith(ext))) {
       results.push(fullPath);
     }
   }
   return results;
+}
+
+function parseExcel(filePath) {
+  const wb = XLSX.readFile(filePath);
+  const chunks = [];
+  for (const sheetName of wb.SheetNames) {
+    // Skip Chinese-only sheets
+    if (/[\u4e00-\u9fa5]/.test(sheetName) && !/[a-zA-Z]/.test(sheetName)) continue;
+    const ws = wb.Sheets[sheetName];
+    const rows = XLSX.utils.sheet_to_json(ws, { header: 1, defval: "" });
+    if (rows.length < 2) continue;
+    const headers = rows[0].map((h) => String(h).trim());
+    for (let i = 1; i < rows.length; i++) {
+      const row = rows[i];
+      if (row.every((cell) => cell === "" || cell === null)) continue;
+      // Build a readable key:value block per row
+      const parts = headers
+        .map((h, j) => {
+          const val = String(row[j] ?? "").trim().replace(/\r\n/g, " ").replace(/\n/g, " ");
+          return h && val ? `${h}: ${val}` : null;
+        })
+        .filter(Boolean);
+      if (parts.length > 0) chunks.push(parts.join(" | "));
+    }
+  }
+  return chunks;
 }
 
 async function parsePDFPages(filePath) {
@@ -76,13 +150,23 @@ export async function loadDocuments() {
   fs.mkdirSync(IMAGES_DIR, { recursive: true });
   fs.mkdirSync(PDFS_DIR, { recursive: true });
 
-  const files = findAllPDFs(dir);
-  console.log(`Loading ${files.length} PDF(s)...`);
+  const files = findAllFiles(dir, [".pdf", ".xlsx", ".xls"]);
+  console.log(`Loading ${files.length} document(s)...`);
   chunks = [];
 
   for (const filePath of files) {
     const fileName = path.basename(filePath);
+    const ext = path.extname(filePath).toLowerCase();
     try {
+      if (ext === ".xlsx" || ext === ".xls") {
+        const rows = parseExcel(filePath);
+        rows.forEach((row) =>
+          chunks.push({ text: row, source: fileName, page: 1, filePath })
+        );
+        console.log(`  ✓ ${fileName} → ${rows.length} rows`);
+        continue;
+      }
+
       // Copy PDF to public/pdfs so it can be linked to
       fs.copyFileSync(filePath, path.join(PDFS_DIR, fileName));
 
@@ -100,7 +184,38 @@ export async function loadDocuments() {
   console.log(`Total chunks: ${chunks.length}`);
 }
 
-export function searchChunks(query, topN = 6) {
+export async function loadWebSources() {
+  const cacheDir = "./web-cache";
+  if (!fs.existsSync(cacheDir)) {
+    console.log("No web-cache directory found, skipping web sources.");
+    return;
+  }
+
+  const metaFiles = fs.readdirSync(cacheDir).filter((f) => f.endsWith(".meta.json"));
+  if (!metaFiles.length) {
+    console.log("No cached web sources found. Run: node fetch-web.js");
+    return;
+  }
+
+  console.log(`Loading ${metaFiles.length} cached web source(s)...`);
+  for (const metaFile of metaFiles) {
+    const metaPath = path.join(cacheDir, metaFile);
+    const txtPath = metaPath.replace(".meta.json", ".txt");
+    try {
+      const { name, url } = JSON.parse(fs.readFileSync(metaPath, "utf8"));
+      if (!fs.existsSync(txtPath)) throw new Error("Missing .txt file");
+      const text = fs.readFileSync(txtPath, "utf8");
+      splitIntoChunks(text).forEach((chunk) =>
+        chunks.push({ text: `[${name}] ${chunk}`, source: name, page: 1, filePath: txtPath, webUrl: url })
+      );
+      console.log(`  ✓ ${name} (${Math.round(text.length / 1000)}KB)`);
+    } catch (err) {
+      console.log(`  ✗ Failed to load ${metaFile}: ${err.message}`);
+    }
+  }
+}
+
+export function searchChunks(query, topN = 8) {
   const queryWords = query.toLowerCase().split(/\s+/);
   const scored = chunks.map((chunk) => {
     const chunkLower = chunk.text.toLowerCase();

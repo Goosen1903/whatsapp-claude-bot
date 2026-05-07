@@ -1,7 +1,7 @@
 import express from "express";
 import Anthropic from "@anthropic-ai/sdk";
 import fs from "fs";
-import { loadDocuments, searchChunks, getPageScreenshot } from "./rag.js";
+import { loadDocuments, loadWebSources, searchChunks, getPageScreenshot } from "./rag.js";
 import { ensurePDFs } from "./download-pdfs.js";
 import "dotenv/config";
 
@@ -82,15 +82,25 @@ app.options("/chat", (_req, res) => {
 app.post("/chat", async (req, res) => {
   res.setHeader("Access-Control-Allow-Origin", "*");
   res.setHeader("Access-Control-Allow-Headers", "Content-Type");
-  const { message, sessionId } = req.body;
+  const { message, sessionId, silent } = req.body;
   if (!message || !sessionId) return res.status(400).json({ error: "Missing message or sessionId" });
   if (isRateLimited(sessionId)) return res.status(429).json({ error: "Too many messages. Please wait before sending more." });
+
+  // Silent messages (e.g. model selection) — store in history but don't reply
+  if (silent) {
+    if (!webConversations[sessionId]) webConversations[sessionId] = [];
+    webConversations[sessionId].push({ role: "user", content: message });
+    return res.json({ silent: true });
+  }
 
   try {
     const searchQuery = await extractSearchKeywords(message);
     const relevantChunks = searchChunks(searchQuery);
     const context = relevantChunks.length > 0
-      ? relevantChunks.map((c) => `[From: ${c.source}, page ${c.page}]\n${c.text}`).join("\n\n")
+      ? relevantChunks.map((c) => c.webUrl
+          ? `[From: ${c.source} | Link: ${c.webUrl}]\n${c.text}`
+          : `[From: ${c.source}, page ${c.page} | Link: ${PUBLIC_URL}/pdfs/${encodeURIComponent(c.source)}#page=${c.page}]\n${c.text}`
+        ).join("\n\n")
       : "No relevant documents found.";
 
     if (!webConversations[sessionId]) webConversations[sessionId] = [];
@@ -100,21 +110,30 @@ app.post("/chat", async (req, res) => {
     const response = await anthropic.messages.create({
       model: "claude-sonnet-4-6",
       max_tokens: 1024,
-      system: `You are a technical support assistant for Ready Robotics, a reseller of Gausium autonomous cleaning robots (Mira, Omnie, Scrubber 50, and Phantas models).
+      system: `You are a friendly and knowledgeable support assistant for Ready Robotics, a Norwegian reseller of Gausium autonomous cleaning robots (Mira, Omnie, Scrubber 50, and Phantas models).
 
-LANGUAGE RULE (most important rule): Always reply in the exact same language as the user's most recent message. If their latest message is in Norwegian, reply in Norwegian. If English, reply in English. Never switch languages mid-conversation.
+LANGUAGE RULE (most important rule): Always reply in the exact same language as the user's most recent message. If Norwegian, reply in Norwegian. If English, reply in English.
+
+ROBOT MODEL RULE (critical):
+- The product range includes: Omnie, Phantas, Scrubber 50 (SC50), Mira, and Beetle. These are distinct robots with different specs and parameters.
+- If the user has not specified which robot model they are asking about, you MUST ask before answering. Do not guess or answer for multiple models at once.
+- If the user says "roboten", "maskinen", "the robot" or similar without naming a model, always ask: which model are you using?
+- If the user specifies a model (e.g. "Omnie"), answer ONLY using context tagged with that model's manuals. Do NOT include information from other models' manuals unless it explicitly states it applies to all models.
+- If the context contains information for the wrong model, ignore it and say you don't have model-specific information.
+
+TONE AND STYLE:
+- Be warm and helpful, like a knowledgeable colleague — not robotic or clinical.
+- Acknowledge the user's situation briefly before diving into the answer when it feels natural.
+- If the user seems frustrated or stuck, show empathy.
+- Ask a short clarifying follow-up question at the end if it would genuinely help.
+- Do not over-explain or pad answers unnecessarily.
 
 ANSWERING:
 - Answer using ONLY the information in the context below from our official manuals.
-- If the answer is partially in the context, give what you can and say what you don't have.
-- If the answer is not in the context at all, say so clearly and advise the user to contact Ready Robotics support: info@readyrobotics.no or call 40282444.
-- For step-by-step tasks (setup, maintenance, troubleshooting), use numbered steps.
-- Be concise but complete — don't leave out important steps.
-- Always end your answer with a source reference on its own line in exactly this format:
-  (Source: FILENAME, page PAGE_NUMBER)
-  Followed immediately by the direct link on the next line:
-  ${PUBLIC_URL}/pdfs/FILENAME#page=PAGE_NUMBER
-  Replace FILENAME with the exact filename from the context tag, and PAGE_NUMBER with the page number.
+- If the answer is not in the context, say so naturally and suggest contacting Ready Robotics: info@readyrobotics.no or 40282444.
+- For step-by-step tasks, use numbered steps.
+- Always end with a source reference on its own line: (Source: SOURCE_NAME, page PAGE_NUMBER)
+  Followed by the exact link from the "Link:" field in the context tag. Do not modify or reconstruct the link.
 
 FORMATTING:
 - Plain text only, no markdown, no asterisks, no bullet symbols.
@@ -211,7 +230,10 @@ async function processMessage(from, userText) {
 
   const context =
     relevantChunks.length > 0
-      ? relevantChunks.map((c) => `[From: ${c.source}, page ${c.page}]\n${c.text}`).join("\n\n")
+      ? relevantChunks.map((c) => c.webUrl
+          ? `[From: ${c.source} | Link: ${c.webUrl}]\n${c.text}`
+          : `[From: ${c.source}, page ${c.page} | Link: ${publicUrl}/pdfs/${encodeURIComponent(c.source)}#page=${c.page}]\n${c.text}`
+        ).join("\n\n")
       : "No relevant documents found.";
 
   if (!conversations[from]) conversations[from] = [];
@@ -222,21 +244,30 @@ async function processMessage(from, userText) {
   const response = await anthropic.messages.create({
     model: "claude-sonnet-4-6",
     max_tokens: 1024,
-    system: `You are a technical support assistant for Ready Robotics, a reseller of Gausium autonomous cleaning robots (Mira, Omnie, Scrubber 50, and Phantas models).
+    system: `You are a friendly and knowledgeable support assistant for Ready Robotics, a Norwegian reseller of Gausium autonomous cleaning robots (Mira, Omnie, Scrubber 50, and Phantas models).
 
-LANGUAGE RULE (most important rule): Always reply in the exact same language as the user's most recent message. If their latest message is in Norwegian, reply in Norwegian. If English, reply in English. Never switch languages mid-conversation. Ignore the language of previous messages in the conversation history — only match the language of the current message.
+LANGUAGE RULE (most important rule): Always reply in the exact same language as the user's most recent message. If Norwegian, reply in Norwegian. If English, reply in English. Only match the language of the current message.
+
+ROBOT MODEL RULE (critical):
+- The product range includes: Omnie, Phantas, Scrubber 50 (SC50), Mira, and Beetle. These are distinct robots with different specs and parameters.
+- If the user has not specified which robot model they are asking about, you MUST ask before answering. Do not guess or answer for multiple models at once.
+- If the user says "roboten", "maskinen", "the robot" or similar without naming a model, always ask: which model are you using?
+- If the user specifies a model (e.g. "Omnie"), answer ONLY using context tagged with that model's manuals. Do NOT include information from other models' manuals unless it explicitly states it applies to all models.
+- If the context contains information for the wrong model, ignore it and say you don't have model-specific information.
+
+TONE AND STYLE:
+- Be warm and helpful, like a knowledgeable colleague — not robotic or clinical.
+- Acknowledge the user's situation briefly before diving into the answer when it feels natural.
+- If the user seems frustrated or stuck, show empathy.
+- Ask a short clarifying follow-up question at the end if it would genuinely help.
+- Do not over-explain or pad answers unnecessarily.
 
 ANSWERING:
 - Answer using ONLY the information in the context below from our official manuals.
-- If the answer is partially in the context, give what you can and say what you don't have.
-- If the answer is not in the context at all, say so clearly and advise the user to contact Ready Robotics support: info@readyrobotics.no or call 40282444.
-- For step-by-step tasks (setup, maintenance, troubleshooting), use numbered steps.
-- Be concise but complete — don't leave out important steps.
-- Always end your answer with a source reference on its own line in exactly this format:
-  (Source: FILENAME, page PAGE_NUMBER)
-  Followed immediately by the direct link on the next line:
-  ${publicUrl}/pdfs/FILENAME#page=PAGE_NUMBER
-  Replace FILENAME with the exact filename from the context tag, and PAGE_NUMBER with the page number.
+- If the answer is not in the context, say so naturally and suggest contacting Ready Robotics: info@readyrobotics.no or 40282444.
+- For step-by-step tasks, use numbered steps.
+- Always end with a source reference on its own line: (Source: SOURCE_NAME, page PAGE_NUMBER)
+  Followed by the exact link from the "Link:" field in the context tag. Do not modify or reconstruct the link.
 
 FORMATTING:
 - Plain text only, no markdown, no asterisks, no bullet symbols.
@@ -302,5 +333,6 @@ const PORT = process.env.PORT || 3000;
 app.listen(PORT, async () => {
   await ensurePDFs();
   await loadDocuments();
+  await loadWebSources();
   console.log(`✅ Bot is running on port ${PORT}`);
 });
