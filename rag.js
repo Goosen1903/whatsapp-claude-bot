@@ -2,9 +2,14 @@ import fs from "fs";
 import path from "path";
 import { pathToFileURL } from "url";
 import { createRequire } from "module";
+import Anthropic from "@anthropic-ai/sdk";
+import "dotenv/config";
 const require = createRequire(import.meta.url);
 const { PDFParse } = require("pdf-parse");
 const XLSX = require("xlsx");
+
+const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
+const OCR_THRESHOLD = 50; // chars/page — below this, attempt OCR
 
 const WEB_SOURCES_FILE = "./web-sources.json";
 
@@ -108,6 +113,57 @@ function parseExcel(filePath) {
   return chunks;
 }
 
+async function ocrPDFPages(filePath) {
+  const cacheFile = filePath.replace(/\.pdf$/i, ".ocr.json");
+  if (fs.existsSync(cacheFile)) {
+    console.log(`    [OCR] Loading cached OCR for ${path.basename(filePath)}`);
+    return JSON.parse(fs.readFileSync(cacheFile, "utf8"));
+  }
+
+  console.log(`    [OCR] Starting Claude Vision OCR for ${path.basename(filePath)}...`);
+  const fileUrl = pathToFileURL(path.resolve(filePath)).href;
+  const parser = new PDFParse({ url: fileUrl });
+  let totalPages = 0;
+  try {
+    const data = await parser.getText();
+    const segs = data.text.split(/--\s*\d+\s*of\s*\d+\s*--/);
+    totalPages = Math.max(segs.length, 1);
+  } catch {}
+  await parser.destroy();
+
+  const pages = [];
+  for (let pageNum = 1; pageNum <= totalPages; pageNum++) {
+    const screenshotFilename = await getPageScreenshot(filePath, pageNum);
+    if (!screenshotFilename) continue;
+
+    const imgPath = path.join(IMAGES_DIR, screenshotFilename);
+    const imgData = fs.readFileSync(imgPath).toString("base64");
+
+    try {
+      const response = await anthropic.messages.create({
+        model: "claude-haiku-4-5-20251001",
+        max_tokens: 1024,
+        messages: [{
+          role: "user",
+          content: [
+            { type: "image", source: { type: "base64", media_type: "image/png", data: imgData } },
+            { type: "text", text: "Extract all text from this technical manual page. Include all headings, steps, warnings, tables and specifications. Output plain text only, preserve structure with newlines." }
+          ]
+        }]
+      });
+      const text = response.content[0].text.trim();
+      if (text.length > 20) pages.push({ pageIndex: pageNum, text });
+      console.log(`    [OCR] Page ${pageNum}/${totalPages}: ${text.length} chars`);
+    } catch (err) {
+      console.error(`    [OCR] Page ${pageNum} failed: ${err.message}`);
+    }
+  }
+
+  fs.writeFileSync(cacheFile, JSON.stringify(pages));
+  console.log(`    [OCR] Done — ${pages.length} pages extracted, cached to ${path.basename(cacheFile)}`);
+  return pages;
+}
+
 async function parsePDFPages(filePath) {
   const fileUrl = pathToFileURL(path.resolve(filePath)).href;
   const parser = new PDFParse({ url: fileUrl });
@@ -115,9 +171,18 @@ async function parsePDFPages(filePath) {
   await parser.destroy();
 
   const segments = data.text.split(/--\s*\d+\s*of\s*\d+\s*--/);
-  return segments
+  const pages = segments
     .map((text, i) => ({ pageIndex: i + 1, text: text.trim() }))
     .filter((p) => p.text.length > 0);
+
+  // Fall back to OCR if text is too sparse
+  const avgChars = pages.length > 0 ? data.text.length / pages.length : 0;
+  if (avgChars < OCR_THRESHOLD) {
+    console.log(`    → Sparse text (${Math.round(avgChars)} chars/page), using OCR...`);
+    return await ocrPDFPages(filePath);
+  }
+
+  return pages;
 }
 
 // Render a single PDF page as a PNG screenshot, cached to disk.
