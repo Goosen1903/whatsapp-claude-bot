@@ -137,7 +137,7 @@ ANSWERING:
 FORMATTING:
 - Plain text only, no markdown, no asterisks, no bullet symbols.
 - Use numbered steps for procedures.
-- Keep replies around 150 words. For procedures, include all steps but be concise. Do not pad unnecessarily.
+- Target around 100 words. Always finish your last sentence naturally — never cut off mid-thought. If there is more relevant information than fits, end with a note that the full details are available in the manual link below.
 
 CONTEXT FROM MANUALS:
 ${context}`;
@@ -289,7 +289,7 @@ ANSWERING:
 FORMATTING:
 - Plain text only, no markdown, no asterisks, no bullet symbols.
 - Use numbered steps for procedures.
-- Keep replies around 150 words. For procedures, include all steps but be concise. Do not pad unnecessarily.
+- Target around 100 words. Always finish your last sentence naturally — never cut off mid-thought. If there is more relevant information than fits, end with a note that the full details are available in the manual link below.
 
 CONTEXT FROM MANUALS:
 ${context}`,
