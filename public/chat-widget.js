@@ -168,6 +168,17 @@
       display: block; font-size: 11px; font-weight: 700; color: ${PRIMARY};
       text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 6px;
     }
+    .rr-feedback {
+      display: flex; gap: 6px; margin-top: 6px;
+    }
+    .rr-feedback button {
+      background: none; border: 1px solid #ddd; border-radius: 20px;
+      padding: 2px 8px; font-size: 13px; cursor: pointer;
+      transition: background 0.15s, border-color 0.15s; color: #666;
+    }
+    .rr-feedback button:hover { background: #f0f2fa; border-color: ${PRIMARY}; }
+    .rr-feedback button.selected-up { background: #e6f4ea; border-color: #34a853; color: #34a853; }
+    .rr-feedback button.selected-down { background: #fce8e6; border-color: #ea4335; color: #ea4335; }
   `;
   document.head.appendChild(style);
 
@@ -314,6 +325,30 @@
   });
   sendBtn.addEventListener("click", send);
 
+  const FEEDBACK_URL = API_URL.replace("/chat", "/feedback");
+
+  function addFeedback(msgDiv, messageText) {
+    const msgId = Date.now().toString(36);
+    const row = document.createElement("div");
+    row.className = "rr-feedback";
+    const up = document.createElement("button");
+    const down = document.createElement("button");
+    up.textContent = "👍"; down.textContent = "👎";
+    function submit(rating, btn) {
+      btn.classList.add(rating === "up" ? "selected-up" : "selected-down");
+      up.disabled = true; down.disabled = true;
+      fetch(FEEDBACK_URL, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ sessionId, messageId: msgId, rating, message: messageText }),
+      }).catch(() => {});
+    }
+    up.addEventListener("click", () => submit("up", up, down));
+    down.addEventListener("click", () => submit("down", down, up));
+    row.appendChild(up); row.appendChild(down);
+    msgDiv.appendChild(row);
+  }
+
   function linkify(text) {
     return text.replace(/(https?:\/\/[^\s]+)/g, (url) =>
       `<a href="${url}" target="_blank" rel="noopener noreferrer" style="color:inherit;text-decoration:underline;word-break:break-all;">${url}</a>`
@@ -342,6 +377,7 @@
         const mainSafe = mainText.replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;");
         div.className = "rr-msg bot";
         div.innerHTML = linkify(mainSafe);
+        addFeedback(div, text);
         messages.appendChild(div);
 
         // Follow-up question as separate highlighted bubble
@@ -355,6 +391,7 @@
       } else {
         div.className = "rr-msg bot";
         div.innerHTML = linkify(safe);
+        addFeedback(div, text);
       }
     } else {
       div.className = "rr-msg " + role;

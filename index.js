@@ -1,7 +1,8 @@
 import express from "express";
 import Anthropic from "@anthropic-ai/sdk";
 import fs from "fs";
-import { loadDocuments, loadWebSources, searchChunks, getPageScreenshot } from "./rag.js";
+import path from "path";
+import { loadDocuments, loadWebSources, searchChunks, getPageScreenshot, DATA_DIR } from "./rag.js";
 import { ensurePDFs } from "./download-pdfs.js";
 import "dotenv/config";
 
@@ -20,12 +21,42 @@ const WA_TOKEN = process.env.WHATSAPP_TOKEN;
 const PHONE_NUMBER_ID = process.env.PHONE_NUMBER_ID;
 const PUBLIC_URL = process.env.PUBLIC_URL || "http://localhost:3000";
 
+// Persistent data directory (mount Railway Volume here)
+fs.mkdirSync(DATA_DIR, { recursive: true });
+const CONVERSATIONS_FILE = path.join(DATA_DIR, "conversations.json");
+const ANALYTICS_FILE = path.join(DATA_DIR, "analytics.jsonl");
+const FEEDBACK_FILE = path.join(DATA_DIR, "feedback.jsonl");
+const ANALYTICS_PASSWORD = process.env.ANALYTICS_PASSWORD || "readyrobotics";
+const DIGEST_KEY = process.env.DIGEST_KEY || ANALYTICS_PASSWORD;
+const RESEND_API_KEY = process.env.RESEND_API_KEY;
+const DIGEST_EMAIL = process.env.DIGEST_EMAIL;
+
 const conversations = {};
 const webConversations = {};
 const sessionModels = {};
 
-const ANALYTICS_FILE = "./documents/analytics.jsonl";
-const ANALYTICS_PASSWORD = process.env.ANALYTICS_PASSWORD || "readyrobotics";
+// Load persisted conversations on startup
+function loadConversations() {
+  try {
+    if (fs.existsSync(CONVERSATIONS_FILE)) {
+      const data = JSON.parse(fs.readFileSync(CONVERSATIONS_FILE, "utf8"));
+      Object.assign(conversations, data.whatsapp || {});
+      Object.assign(webConversations, data.web || {});
+      Object.assign(sessionModels, data.sessionModels || {});
+      console.log(`Loaded conversations: ${Object.keys(conversations).length} WA, ${Object.keys(webConversations).length} web sessions`);
+    }
+  } catch (err) {
+    console.warn("Could not load conversations:", err.message);
+  }
+}
+
+let saveTimer;
+function saveConversations() {
+  clearTimeout(saveTimer);
+  saveTimer = setTimeout(() => {
+    fs.writeFile(CONVERSATIONS_FILE, JSON.stringify({ whatsapp: conversations, web: webConversations, sessionModels }), () => {});
+  }, 2000);
+}
 
 function logQuery(source, question, answerable) {
   const entry = JSON.stringify({ ts: new Date().toISOString(), source, question, answerable }) + "\n";
@@ -78,6 +109,21 @@ app.options("/chat", (_req, res) => {
   res.setHeader("Access-Control-Allow-Origin", "*");
   res.setHeader("Access-Control-Allow-Headers", "Content-Type");
   res.sendStatus(204);
+});
+
+app.options("/feedback", (_req, res) => {
+  res.setHeader("Access-Control-Allow-Origin", "*");
+  res.setHeader("Access-Control-Allow-Headers", "Content-Type");
+  res.sendStatus(204);
+});
+
+app.post("/feedback", (req, res) => {
+  res.setHeader("Access-Control-Allow-Origin", "*");
+  const { sessionId, messageId, rating, message } = req.body;
+  if (!sessionId || !rating) return res.status(400).json({ error: "Missing fields" });
+  const entry = JSON.stringify({ ts: new Date().toISOString(), sessionId, messageId, rating, message }) + "\n";
+  fs.appendFile(FEEDBACK_FILE, entry, () => {});
+  res.json({ ok: true });
 });
 
 app.post("/chat", async (req, res) => {
@@ -167,6 +213,7 @@ ${context}`;
     webConversations[sessionId].push({ role: "assistant", content: reply });
     const answerable = !reply.toLowerCase().includes("don't have") && !reply.toLowerCase().includes("ikke har");
     logQuery("web", message, answerable);
+    saveConversations();
   } catch (err) {
     console.error("[CHAT ERROR]", err);
     if (!res.headersSent) res.status(500).json({ error: "Failed to process message" });
@@ -202,6 +249,57 @@ app.get("/analytics", (req, res) => {
   <table><tr><th>Time</th><th>Source</th><th>Question</th><th>Answered</th></tr>
   ${recent.map(e => `<tr><td>${new Date(e.ts).toLocaleString("no-NO")}</td><td>${e.source}</td><td>${e.question}</td><td>${e.answerable ? "✅" : "❌"}</td></tr>`).join("")}
   </table></body></html>`);
+});
+
+app.get("/digest", async (req, res) => {
+  if (req.query.key !== DIGEST_KEY) return res.status(401).send("Unauthorized");
+
+  const weekAgo = Date.now() - 7 * 24 * 60 * 60 * 1000;
+
+  const readJsonl = (file) => {
+    if (!fs.existsSync(file)) return [];
+    return fs.readFileSync(file, "utf8").trim().split("\n").filter(Boolean)
+      .map(l => { try { return JSON.parse(l); } catch { return null; } }).filter(Boolean);
+  };
+
+  const analytics = readJsonl(ANALYTICS_FILE).filter(e => new Date(e.ts) > weekAgo);
+  const feedback = readJsonl(FEEDBACK_FILE).filter(e => new Date(e.ts) > weekAgo);
+
+  const unanswered = analytics.filter(e => !e.answerable);
+  const thumbsUp = feedback.filter(e => e.rating === "up").length;
+  const thumbsDown = feedback.filter(e => e.rating === "down").length;
+
+  const summary = [
+    `Ready Robotics Support Bot — Ukentlig digest`,
+    `Periode: siste 7 dager`,
+    ``,
+    `Meldinger totalt: ${analytics.length}`,
+    `Ubesvarte:        ${unanswered.length}`,
+    `👍 Positive:      ${thumbsUp}`,
+    `👎 Negative:      ${thumbsDown}`,
+    ``,
+    `Topp ubesvarte spørsmål:`,
+    ...unanswered.slice(-15).reverse().map(e => `  • [${e.source}] ${e.question}`),
+  ].join("\n");
+
+  if (RESEND_API_KEY && DIGEST_EMAIL) {
+    try {
+      await fetch("https://api.resend.com/emails", {
+        method: "POST",
+        headers: { Authorization: `Bearer ${RESEND_API_KEY}`, "Content-Type": "application/json" },
+        body: JSON.stringify({
+          from: "bot@readyrobotics.no",
+          to: DIGEST_EMAIL,
+          subject: `Support bot digest — ${analytics.length} meldinger denne uken`,
+          text: summary,
+        }),
+      });
+    } catch (err) {
+      console.error("[DIGEST] Email failed:", err.message);
+    }
+  }
+
+  res.send(`<pre style="font-family:monospace;padding:32px">${summary}</pre>`);
 });
 
 async function extractSearchKeywords(text) {
@@ -301,6 +399,7 @@ ${context}`,
   conversations[from].push({ role: "assistant", content: reply });
   const answerable = !reply.toLowerCase().includes("don't have") && !reply.toLowerCase().includes("ikke har");
   logQuery("whatsapp", userText, answerable);
+  saveConversations();
 
   const waRes = await fetch(
     `https://graph.facebook.com/v19.0/${PHONE_NUMBER_ID}/messages`,
@@ -348,6 +447,7 @@ ${context}`,
 
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, async () => {
+  loadConversations();
   await ensurePDFs();
   await loadDocuments();
   await loadWebSources();

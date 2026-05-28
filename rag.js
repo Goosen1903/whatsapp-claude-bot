@@ -10,6 +10,8 @@ const XLSX = require("xlsx");
 
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 const OCR_THRESHOLD = 50; // chars/page — below this, attempt OCR
+export const DATA_DIR = process.env.DATA_DIR || "./data";
+const OCR_CACHE_DIR = path.join(DATA_DIR, "ocr");
 
 const WEB_SOURCES_FILE = "./web-sources.json";
 
@@ -114,7 +116,9 @@ function parseExcel(filePath) {
 }
 
 async function ocrPDFPages(filePath) {
-  const cacheFile = filePath.replace(/\.pdf$/i, ".ocr.json");
+  fs.mkdirSync(OCR_CACHE_DIR, { recursive: true });
+  const baseName = path.basename(filePath, ".pdf").replace(/\s+/g, "_");
+  const cacheFile = path.join(OCR_CACHE_DIR, `${baseName}.ocr.json`);
   if (fs.existsSync(cacheFile)) {
     console.log(`    [OCR] Loading cached OCR for ${path.basename(filePath)}`);
     return JSON.parse(fs.readFileSync(cacheFile, "utf8"));
@@ -160,7 +164,7 @@ async function ocrPDFPages(filePath) {
   }
 
   fs.writeFileSync(cacheFile, JSON.stringify(pages));
-  console.log(`    [OCR] Done — ${pages.length} pages extracted, cached to ${path.basename(cacheFile)}`);
+  console.log(`    [OCR] Done — ${pages.length} pages extracted, cached to ${cacheFile}`);
   return pages;
 }
 
