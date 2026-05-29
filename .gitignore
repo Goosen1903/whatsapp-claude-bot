@@ -4,3 +4,5 @@ public/images/
 public/pdfs/
 # documents/ tracked via git-lfs
 .DS_Store
+~$*.xlsx
+~$*.xls

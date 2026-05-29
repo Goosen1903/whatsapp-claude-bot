@@ -98,8 +98,17 @@ function parseExcel(filePath) {
     const ws = wb.Sheets[sheetName];
     const rows = XLSX.utils.sheet_to_json(ws, { header: 1, defval: "" });
     if (rows.length < 2) continue;
-    const headers = rows[0].map((h) => String(h).trim());
-    for (let i = 1; i < rows.length; i++) {
+    // Find actual header row \u2014 some files have title rows before the column headers
+    let headerRowIdx = 0;
+    for (let i = 0; i < Math.min(rows.length, 10); i++) {
+      const rowStr = rows[i].join(" ").toLowerCase();
+      if (rowStr.includes("part code") || rowStr.includes("part name") || rowStr.includes("part no") || rowStr.includes("error code")) {
+        headerRowIdx = i;
+        break;
+      }
+    }
+    const headers = rows[headerRowIdx].map((h) => String(h).trim());
+    for (let i = headerRowIdx + 1; i < rows.length; i++) {
       const row = rows[i];
       if (row.every((cell) => cell === "" || cell === null)) continue;
       // Build a readable key:value block per row
