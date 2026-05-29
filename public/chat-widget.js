@@ -97,31 +97,31 @@
     #rr-chat-new:hover, #rr-chat-expand:hover { color: #dde1f0; background: rgba(255,255,255,0.08); }
     #rr-chat-messages {
       flex: 1; overflow-y: auto; padding: 16px; display: flex;
-      flex-direction: column; gap: 10px;
-      scrollbar-width: thin; scrollbar-color: rgba(255,255,255,0.1) transparent;
+      flex-direction: column; gap: 10px; background: #fff;
+      scrollbar-width: thin; scrollbar-color: rgba(0,0,0,0.1) transparent;
     }
     #rr-chat-messages::-webkit-scrollbar { width: 4px; }
     #rr-chat-messages::-webkit-scrollbar-track { background: transparent; }
-    #rr-chat-messages::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.1); border-radius: 2px; }
+    #rr-chat-messages::-webkit-scrollbar-thumb { background: rgba(0,0,0,0.1); border-radius: 2px; }
     #rr-model-picker {
-      padding: 16px; border-top: 1px solid rgba(255,255,255,0.06); flex-shrink: 0;
-      background: #0c0e14;
+      padding: 16px; border-top: 1px solid rgba(0,0,0,0.07); flex-shrink: 0;
+      background: #f8f9fc;
     }
     #rr-model-picker p {
-      font-size: 13px; font-weight: 600; color: #dde1f0; margin: 0 0 10px 0;
+      font-size: 13px; font-weight: 600; color: #1a1a1a; margin: 0 0 10px 0;
       font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
     }
     #rr-model-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-bottom: 10px; }
     .rr-model-btn {
-      background: #1e2130; border: 1.5px solid rgba(255,255,255,0.08); border-radius: 10px;
+      background: #fff; border: 1.5px solid #ddd; border-radius: 10px;
       padding: 8px 10px; font-size: 13px; cursor: pointer; text-align: left;
       font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
-      transition: border-color 0.15s, background 0.15s; color: #dde1f0;
+      transition: border-color 0.15s, background 0.15s; color: #1a1a1a;
       display: flex; align-items: center; gap: 6px;
     }
-    .rr-model-btn:hover { border-color: rgba(76,110,245,0.5); background: #252a3a; }
-    .rr-model-btn.selected { border-color: #4c6ef5; background: #252a3a; font-weight: 600; }
-    .rr-model-btn.selected::before { content: "✓ "; color: #4c6ef5; }
+    .rr-model-btn:hover { border-color: ${PRIMARY}; background: #f0f2fa; }
+    .rr-model-btn.selected { border-color: ${PRIMARY}; background: #e8ecf8; font-weight: 600; }
+    .rr-model-btn.selected::before { content: "✓ "; color: ${PRIMARY}; }
     #rr-model-confirm {
       width: 100%; background: ${PRIMARY}; color: #fff; border: none;
       border-radius: 10px; padding: 10px; font-size: 14px; font-weight: 600;
@@ -130,25 +130,25 @@
     }
     #rr-model-confirm.active { opacity: 1; pointer-events: auto; }
     #rr-role-picker {
-      padding: 16px; border-top: 1px solid rgba(255,255,255,0.06); flex-shrink: 0;
-      background: #0c0e14; display: none;
+      padding: 16px; border-top: 1px solid rgba(0,0,0,0.07); flex-shrink: 0;
+      background: #f8f9fc; display: none;
     }
     #rr-role-picker p {
-      font-size: 13px; font-weight: 600; color: #dde1f0; margin: 0 0 10px 0;
+      font-size: 13px; font-weight: 600; color: #1a1a1a; margin: 0 0 10px 0;
       font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
     }
     #rr-role-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
     .rr-role-btn {
-      background: #1e2130; border: 1.5px solid rgba(255,255,255,0.08); border-radius: 10px;
+      background: #fff; border: 1.5px solid #ddd; border-radius: 10px;
       padding: 14px 10px; font-size: 13px; cursor: pointer; text-align: center;
       font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
-      transition: border-color 0.15s, background 0.15s; color: #dde1f0;
+      transition: border-color 0.15s, background 0.15s; color: #1a1a1a;
       display: flex; flex-direction: column; align-items: center; gap: 6px;
     }
-    .rr-role-btn:hover { border-color: rgba(76,110,245,0.5); background: #252a3a; }
+    .rr-role-btn:hover { border-color: ${PRIMARY}; background: #f0f2fa; }
     .rr-role-btn .rr-role-icon { font-size: 26px; }
     .rr-role-btn .rr-role-label { font-weight: 600; font-size: 13px; }
-    .rr-role-btn .rr-role-sub { font-size: 11px; color: #8b92a8; }
+    .rr-role-btn .rr-role-sub { font-size: 11px; color: #666; }
     .rr-msg {
       max-width: 82%; padding: 10px 14px; border-radius: 14px;
       font-size: 14px; line-height: 1.5; white-space: pre-wrap; word-break: break-word;
@@ -158,17 +158,17 @@
       border-bottom-right-radius: 4px;
     }
     .rr-msg.bot {
-      background: #1e2130; color: #dde1f0; align-self: flex-start;
+      background: #f1f3f8; color: #1a1a1a; align-self: flex-start;
       border-bottom-left-radius: 4px;
     }
     .rr-typing-status {
       display: flex; align-items: center; gap: 8px;
-      padding: 6px 2px; color: #8b92a8; font-size: 13px; align-self: flex-start;
+      padding: 6px 2px; color: #888; font-size: 13px; align-self: flex-start;
       font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
     }
     .rr-typing-dot {
       width: 7px; height: 7px; border-radius: 50%; flex-shrink: 0;
-      background: #4c6ef5; animation: rr-pulse 1.4s ease-in-out infinite;
+      background: ${PRIMARY}; animation: rr-pulse 1.4s ease-in-out infinite;
     }
     @keyframes rr-pulse {
       0%, 100% { opacity: 0.3; transform: scale(0.7); }
@@ -195,23 +195,23 @@
     }
     #rr-chat-send:disabled { opacity: 0.4; cursor: default; }
     .rr-msg.bot.rr-question {
-      background: #1a2040; border: 1.5px solid #4c6ef5; color: #dde1f0; position: relative;
+      background: #EEF0FA; border: 1.5px solid ${PRIMARY}; color: #1a1a1a; position: relative;
     }
     .rr-question-label {
-      display: block; font-size: 11px; font-weight: 700; color: #4c6ef5;
+      display: block; font-size: 11px; font-weight: 700; color: ${PRIMARY};
       text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 6px;
     }
     .rr-feedback { display: flex; gap: 5px; margin-top: 8px; }
     .rr-feedback button {
-      background: none; border: 1px solid rgba(255,255,255,0.08); border-radius: 6px;
+      background: none; border: 1px solid rgba(0,0,0,0.12); border-radius: 6px;
       width: 28px; height: 24px; font-size: 12px; cursor: pointer; line-height: 1;
       display: flex; align-items: center; justify-content: center;
-      transition: background 0.15s, border-color 0.15s, color 0.15s; color: #5a6070;
+      transition: background 0.15s, border-color 0.15s, color 0.15s; color: #aaa;
       font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
     }
-    .rr-feedback button:hover { background: rgba(255,255,255,0.06); border-color: rgba(255,255,255,0.2); color: #dde1f0; }
-    .rr-feedback button.selected-up { background: rgba(52,168,83,0.12); border-color: rgba(52,168,83,0.4); color: #34a853; }
-    .rr-feedback button.selected-down { background: rgba(234,67,53,0.12); border-color: rgba(234,67,53,0.4); color: #ea4335; }
+    .rr-feedback button:hover { background: #f0f2fa; border-color: ${PRIMARY}; color: ${PRIMARY}; }
+    .rr-feedback button.selected-up { background: #e6f4ea; border-color: #34a853; color: #34a853; }
+    .rr-feedback button.selected-down { background: #fce8e6; border-color: #ea4335; color: #ea4335; }
   `;
   document.head.appendChild(style);
 
@@ -415,7 +415,7 @@
 
   function linkify(text) {
     return text.replace(/(https?:\/\/[^\s]+)/g, (url) =>
-      `<a href="${url}" target="_blank" rel="noopener noreferrer" style="color:#7c9ff5;text-decoration:underline;word-break:break-all;">${url}</a>`
+      `<a href="${url}" target="_blank" rel="noopener noreferrer" style="color:${PRIMARY};text-decoration:underline;word-break:break-all;">${url}</a>`
     );
   }
 
