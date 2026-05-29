@@ -7,7 +7,7 @@ import { ensurePDFs } from "./download-pdfs.js";
 import "dotenv/config";
 
 const app = express();
-app.use(express.json());
+app.use(express.json({ limit: "10mb" }));
 app.use(express.static("public"));
 app.use((req, res, next) => {
   res.setHeader("ngrok-skip-browser-warning", "true");
@@ -131,8 +131,8 @@ app.post("/feedback", (req, res) => {
 app.post("/chat", async (req, res) => {
   res.setHeader("Access-Control-Allow-Origin", "*");
   res.setHeader("Access-Control-Allow-Headers", "Content-Type");
-  const { message, sessionId, silent } = req.body;
-  if (!message || !sessionId) return res.status(400).json({ error: "Missing message or sessionId" });
+  const { message, sessionId, silent, image } = req.body;
+  if ((!message && !image) || !sessionId) return res.status(400).json({ error: "Missing message or sessionId" });
   if (isRateLimited(sessionId)) return res.status(429).json({ error: "Too many messages. Please wait before sending more." });
 
   // Silent messages (e.g. model + role selection) — store context and don't reply
@@ -145,7 +145,7 @@ app.post("/chat", async (req, res) => {
   }
 
   try {
-    const searchQuery = await extractSearchKeywords(message);
+    const searchQuery = message ? await extractSearchKeywords(message) : "robot del komponent vedlikehold feil";
     const relevantChunks = searchChunks(searchQuery);
     const context = relevantChunks.length > 0
       ? relevantChunks.map((c) => c.webUrl
@@ -155,8 +155,21 @@ app.post("/chat", async (req, res) => {
       : "No relevant documents found.";
 
     if (!webConversations[sessionId]) webConversations[sessionId] = [];
-    webConversations[sessionId].push({ role: "user", content: message });
-    const history = webConversations[sessionId].slice(-6);
+    // Store text-only in history (images are not persisted to save memory)
+    webConversations[sessionId].push({ role: "user", content: message || "[bilde sendt]" });
+    const historySlice = webConversations[sessionId].slice(-6);
+
+    // Build messages array: text-only history + current message (may include image)
+    const userContent = image
+      ? [
+          { type: "image", source: { type: "base64", media_type: image.mediaType, data: image.data } },
+          { type: "text", text: message || "Hva er dette? Identifiser delen eller problemet på bildet." }
+        ]
+      : message;
+    const history = [
+      ...historySlice.slice(0, -1),
+      { role: "user", content: userContent }
+    ];
 
     const selectedModel = sessionModels[sessionId];
     const selectedRole = sessionRoles[sessionId];
@@ -170,6 +183,13 @@ ROBOT MODEL RULE (critical):
 - If no model is selected and the user says "roboten", "maskinen", "the robot" or similar, ask: which model are you using?
 - If the user specifies a model (e.g. "Omnie"), answer ONLY using context tagged with that model's manuals. Do NOT include information from other models' manuals unless it explicitly states it applies to all models.
 - If the context contains information for the wrong model, ignore it and say you don't have model-specific information.
+
+IMAGE ANALYSIS (applies when the user sends a photo):
+- Describe briefly what you see before answering.
+- If it shows a robot part: identify it by name, which model it belongs to, and suggest the part number if found in the context.
+- If it shows an error code or display screen: read the exact code and provide the solution from context.
+- If it shows damage or wear: assess severity and recommend replacement or action.
+- Cross-reference what you see with the parts information in the context for the most accurate identification.
 
 TONE AND STYLE:
 - Be warm and helpful, like a knowledgeable colleague — not robotic or clinical.

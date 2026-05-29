@@ -174,8 +174,31 @@
       0%, 100% { opacity: 0.3; transform: scale(0.7); }
       50% { opacity: 1; transform: scale(1); }
     }
+    #rr-img-preview {
+      display: none; align-items: center; gap: 10px;
+      padding: 8px 12px; border-top: 1px solid rgba(0,0,0,0.06);
+      background: #f8f9fc; flex-shrink: 0;
+    }
+    #rr-img-thumb {
+      height: 52px; width: 52px; border-radius: 8px; object-fit: cover;
+      border: 1px solid rgba(0,0,0,0.1); flex-shrink: 0;
+    }
+    #rr-img-name { font-size: 12px; color: #555; flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    #rr-img-remove {
+      background: rgba(0,0,0,0.1); border: none; border-radius: 50%;
+      width: 22px; height: 22px; cursor: pointer; font-size: 11px;
+      display: flex; align-items: center; justify-content: center; color: #444; flex-shrink: 0;
+    }
+    #rr-img-remove:hover { background: rgba(0,0,0,0.2); }
+    #rr-chat-attach {
+      background: none; border: none; color: #8b92a8; cursor: pointer;
+      width: 34px; height: 34px; display: flex; align-items: center; justify-content: center;
+      border-radius: 50%; transition: color 0.15s, background 0.15s; flex-shrink: 0; padding: 0;
+    }
+    #rr-chat-attach:hover { color: #dde1f0; background: rgba(255,255,255,0.08); }
+    #rr-chat-attach.has-image { color: #4c6ef5; }
     #rr-chat-input-row {
-      display: flex; gap: 8px; padding: 12px;
+      display: flex; align-items: center; gap: 6px; padding: 10px 12px;
       border-top: 1px solid rgba(255,255,255,0.06); flex-shrink: 0;
       background: #0c0e14;
     }
@@ -282,7 +305,14 @@
         </button>
       </div>
     </div>
+    <div id="rr-img-preview">
+      <img id="rr-img-thumb" src="" alt="">
+      <span id="rr-img-name"></span>
+      <button id="rr-img-remove">✕</button>
+    </div>
     <div id="rr-chat-input-row">
+      <button id="rr-chat-attach" title="Last opp bilde"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="16" height="16"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/></svg></button>
+      <input type="file" id="rr-chat-file" accept="image/*" style="display:none">
       <textarea id="rr-chat-input" placeholder="Skriv et spørsmål..." rows="1"></textarea>
       <button id="rr-chat-send">➤</button>
     </div>
@@ -387,6 +417,63 @@
   });
   sendBtn.addEventListener("click", send);
 
+  // Image upload
+  let pendingImage = null;
+  const fileInput = win.querySelector("#rr-chat-file");
+  const attachBtn = win.querySelector("#rr-chat-attach");
+  const imgPreview = win.querySelector("#rr-img-preview");
+  const imgThumb = win.querySelector("#rr-img-thumb");
+  const imgName = win.querySelector("#rr-img-name");
+  const imgRemove = win.querySelector("#rr-img-remove");
+
+  attachBtn.addEventListener("click", () => fileInput.click());
+
+  imgRemove.addEventListener("click", () => {
+    pendingImage = null;
+    fileInput.value = "";
+    imgPreview.style.display = "none";
+    attachBtn.classList.remove("has-image");
+  });
+
+  function resizeImage(file) {
+    return new Promise((resolve) => {
+      const img = new Image();
+      const url = URL.createObjectURL(file);
+      img.onload = () => {
+        URL.revokeObjectURL(url);
+        const MAX = 1200;
+        let { width, height } = img;
+        if (width > MAX || height > MAX) {
+          if (width > height) { height = Math.round(height * MAX / width); width = MAX; }
+          else { width = Math.round(width * MAX / height); height = MAX; }
+        }
+        const canvas = document.createElement("canvas");
+        canvas.width = width; canvas.height = height;
+        canvas.getContext("2d").drawImage(img, 0, 0, width, height);
+        canvas.toBlob((blob) => {
+          const reader = new FileReader();
+          reader.onload = (e) => {
+            const dataUrl = e.target.result;
+            resolve({ data: dataUrl.split(",")[1], mediaType: "image/jpeg", previewUrl: dataUrl });
+          };
+          reader.readAsDataURL(blob);
+        }, "image/jpeg", 0.85);
+      };
+      img.src = url;
+    });
+  }
+
+  fileInput.addEventListener("change", async (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+    pendingImage = await resizeImage(file);
+    imgThumb.src = pendingImage.previewUrl;
+    imgName.textContent = file.name;
+    imgPreview.style.display = "flex";
+    attachBtn.classList.add("has-image");
+    input.focus();
+  });
+
   const FEEDBACK_URL = API_URL.replace("/chat", "/feedback");
 
   function addFeedback(msgDiv, messageText) {
@@ -468,24 +555,43 @@
 
   async function send() {
     const text = input.value.trim();
-    if (!text) return;
+    if (!text && !pendingImage) return;
     input.value = "";
     sendBtn.disabled = true;
 
-    appendMessage("user", text);
-    history.push({ role: "user", text });
+    // Show user message (with optional image thumbnail)
+    if (pendingImage) {
+      const imgMsgDiv = document.createElement("div");
+      imgMsgDiv.className = "rr-msg user";
+      const textSafe = text ? `<div style="margin-top:6px;white-space:pre-wrap">${text.replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;")}</div>` : "";
+      imgMsgDiv.innerHTML = `<img src="${pendingImage.previewUrl}" style="max-width:180px;border-radius:8px;display:block;">${textSafe}`;
+      messages.appendChild(imgMsgDiv);
+      messages.scrollTop = messages.scrollHeight;
+    } else {
+      appendMessage("user", text);
+    }
+    history.push({ role: "user", text: text || "[bilde]" });
+
+    // Capture and clear pending image before async work
+    const imageToSend = pendingImage;
+    pendingImage = null;
+    fileInput.value = "";
+    imgPreview.style.display = "none";
+    attachBtn.classList.remove("has-image");
 
     const statusDiv = document.createElement("div");
     statusDiv.className = "rr-typing-status";
-    statusDiv.innerHTML = `<span class="rr-typing-dot"></span><span class="rr-typing-label">Søker i manualer…</span>`;
+    statusDiv.innerHTML = `<span class="rr-typing-dot"></span><span class="rr-typing-label">${imageToSend ? "Analyserer bilde…" : "Søker i manualer…"}</span>`;
     messages.appendChild(statusDiv);
     messages.scrollTop = messages.scrollHeight;
 
     try {
+      const body = { message: text, sessionId };
+      if (imageToSend) body.image = { data: imageToSend.data, mediaType: imageToSend.mediaType };
       const res = await fetch(API_URL, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ message: text, sessionId }),
+        body: JSON.stringify(body),
       });
 
       if (res.status === 429) {
