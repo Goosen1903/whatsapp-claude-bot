@@ -34,6 +34,7 @@ const DIGEST_EMAIL = process.env.DIGEST_EMAIL;
 const conversations = {};
 const webConversations = {};
 const sessionModels = {};
+const sessionRoles = {};
 
 // Load persisted conversations on startup
 function loadConversations() {
@@ -43,6 +44,7 @@ function loadConversations() {
       Object.assign(conversations, data.whatsapp || {});
       Object.assign(webConversations, data.web || {});
       Object.assign(sessionModels, data.sessionModels || {});
+      Object.assign(sessionRoles, data.sessionRoles || {});
       console.log(`Loaded conversations: ${Object.keys(conversations).length} WA, ${Object.keys(webConversations).length} web sessions`);
     }
   } catch (err) {
@@ -54,7 +56,7 @@ let saveTimer;
 function saveConversations() {
   clearTimeout(saveTimer);
   saveTimer = setTimeout(() => {
-    fs.writeFile(CONVERSATIONS_FILE, JSON.stringify({ whatsapp: conversations, web: webConversations, sessionModels }), () => {});
+    fs.writeFile(CONVERSATIONS_FILE, JSON.stringify({ whatsapp: conversations, web: webConversations, sessionModels, sessionRoles }), () => {});
   }, 2000);
 }
 
@@ -133,10 +135,12 @@ app.post("/chat", async (req, res) => {
   if (!message || !sessionId) return res.status(400).json({ error: "Missing message or sessionId" });
   if (isRateLimited(sessionId)) return res.status(429).json({ error: "Too many messages. Please wait before sending more." });
 
-  // Silent messages (e.g. model selection) — store model and don't reply
+  // Silent messages (e.g. model + role selection) — store context and don't reply
   if (silent) {
-    const modelMatch = message.match(/Jeg bruker (.+)\./);
+    const modelMatch = message.match(/Jeg bruker (.+?)\./);
     if (modelMatch) sessionModels[sessionId] = modelMatch[1].trim();
+    const roleMatch = message.match(/Jeg er (.+?)\./);
+    if (roleMatch) sessionRoles[sessionId] = roleMatch[1].trim();
     return res.json({ silent: true });
   }
 
@@ -155,8 +159,9 @@ app.post("/chat", async (req, res) => {
     const history = webConversations[sessionId].slice(-6);
 
     const selectedModel = sessionModels[sessionId];
+    const selectedRole = sessionRoles[sessionId];
     const systemPrompt = `You are a friendly and knowledgeable support assistant for Ready Robotics, a Norwegian reseller of Gausium autonomous cleaning robots (Mira, Omnie, Scrubber 50, and Phantas models).
-${selectedModel ? `\nSELECTED MODEL: The user has selected "${selectedModel}" at the start of this session. Always treat all questions as being about ${selectedModel} unless the user explicitly asks about a different model.\n` : ""}
+${selectedModel ? `\nSELECTED MODEL: The user has selected "${selectedModel}". Always treat all questions as being about ${selectedModel} unless they explicitly ask about a different model.\n` : ""}${selectedRole === "servicetekniker" ? `\nUSER ROLE: Service technician. Use precise technical language. Include component names, error codes, torque specs, and detailed step-by-step procedures. Assume technical knowledge.\n` : ""}${selectedRole === "renholder" || selectedRole === "renholder/placemaker" ? `\nUSER ROLE: Cleaner/Placemaker (robot operator). Use simple, clear language. Focus on daily operation, cleaning routines, and basic troubleshooting. Avoid unnecessary technical jargon.\n` : ""}
 LANGUAGE RULE (most important rule): Always reply in the exact same language as the user's most recent message. If Norwegian, reply in Norwegian. If English, reply in English.
 
 ROBOT MODEL RULE (critical):

@@ -132,6 +132,26 @@
       transition: opacity 0.2s;
     }
     #rr-model-confirm.active { opacity: 1; pointer-events: auto; }
+    #rr-role-picker {
+      padding: 16px; border-top: 1px solid #eee; flex-shrink: 0;
+      background: #f8f9fc; display: none;
+    }
+    #rr-role-picker p {
+      font-size: 13px; font-weight: 600; color: #333; margin: 0 0 10px 0;
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    }
+    #rr-role-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+    .rr-role-btn {
+      background: #fff; border: 1.5px solid #ddd; border-radius: 10px;
+      padding: 14px 10px; font-size: 13px; cursor: pointer; text-align: center;
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      transition: border-color 0.15s, background 0.15s; color: #1a1a1a;
+      display: flex; flex-direction: column; align-items: center; gap: 6px;
+    }
+    .rr-role-btn:hover { border-color: ${PRIMARY}; background: #f0f2fa; }
+    .rr-role-btn .rr-role-icon { font-size: 26px; }
+    .rr-role-btn .rr-role-label { font-weight: 600; font-size: 13px; }
+    .rr-role-btn .rr-role-sub { font-size: 11px; color: #666; }
     .rr-msg {
       max-width: 82%; padding: 10px 14px; border-radius: 14px;
       font-size: 14px; line-height: 1.5; white-space: pre-wrap; word-break: break-word;
@@ -232,7 +252,22 @@
         <button class="rr-model-btn" data-model="Mira">Mira</button>
         <button class="rr-model-btn" data-model="">Vet ikke</button>
       </div>
-      <button id="rr-model-confirm" disabled>Start samtale →</button>
+      <button id="rr-model-confirm" disabled>Neste →</button>
+    </div>
+    <div id="rr-role-picker">
+      <p>Hvem er du?</p>
+      <div id="rr-role-grid">
+        <button class="rr-role-btn" data-role="servicetekniker">
+          <span class="rr-role-icon">🔧</span>
+          <span class="rr-role-label">Servicetekniker</span>
+          <span class="rr-role-sub">Reparasjon og teknisk støtte</span>
+        </button>
+        <button class="rr-role-btn" data-role="renholder">
+          <span class="rr-role-icon">🧹</span>
+          <span class="rr-role-label">Renholder / Placemaker</span>
+          <span class="rr-role-sub">Daglig drift og vedlikehold</span>
+        </button>
+      </div>
     </div>
     <div id="rr-chat-input-row">
       <textarea id="rr-chat-input" placeholder="Skriv et spørsmål..." rows="1"></textarea>
@@ -248,7 +283,9 @@
   const newChatBtn = win.querySelector("#rr-chat-new");
   const modelPicker = win.querySelector("#rr-model-picker");
   const modelConfirm = win.querySelector("#rr-model-confirm");
+  const rolePicker = win.querySelector("#rr-role-picker");
   let selectedModel = null;
+  let selectedRole = null;
 
   win.querySelectorAll(".rr-model-btn").forEach((btn) => {
     btn.addEventListener("click", () => {
@@ -262,24 +299,35 @@
 
   modelConfirm.addEventListener("click", () => {
     modelPicker.style.display = "none";
-    const greeting = selectedModel
-      ? `Hei! Jeg er Ready Robotics sin supportassistent. Jeg ser du har valgt ${selectedModel} — hva kan jeg hjelpe deg med?`
-      : "Hei! Jeg er Ready Robotics sin supportassistent. Hvordan kan jeg hjelpe deg i dag?";
-    appendMessage("bot", greeting);
-    if (selectedModel) {
+    rolePicker.style.display = "";
+  });
+
+  win.querySelectorAll(".rr-role-btn").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      selectedRole = btn.dataset.role;
+      rolePicker.style.display = "none";
+
+      const roleLabel = selectedRole === "servicetekniker" ? "servicetekniker" : "renholder/placemaker";
+      const modelPart = selectedModel ? ` for ${selectedModel}` : "";
+      const greeting = `Hei! Jeg er Ready Robotics sin supportassistent. Jeg ser du er ${roleLabel}${modelPart} — hva kan jeg hjelpe deg med?`;
+
+      appendMessage("bot", greeting);
       history.push({ role: "assistant", text: greeting });
       saveHistory(history);
-      // Send model selection silently to server so it's in server-side history
-      if (selectedModel) {
-        fetch(API_URL, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ message: `Jeg bruker ${selectedModel}.`, sessionId, silent: true }),
-        }).catch(() => {});
-        history.push({ role: "user", text: `Jeg bruker ${selectedModel}.` });
-      }
-    }
-    input.focus();
+
+      const silentMsg = [
+        selectedModel ? `Jeg bruker ${selectedModel}.` : null,
+        `Jeg er ${roleLabel}.`,
+      ].filter(Boolean).join(" ");
+
+      fetch(API_URL, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ message: silentMsg, sessionId, silent: true }),
+      }).catch(() => {});
+
+      input.focus();
+    });
   });
 
   expandBtn.addEventListener("click", () => {
@@ -290,17 +338,18 @@
   });
 
   newChatBtn.addEventListener("click", () => {
-    if (!confirm("Start en ny samtale? Historikken slettes.")) return;
     localStorage.removeItem(HISTORY_KEY);
     localStorage.removeItem(SESSION_KEY);
     messages.innerHTML = "";
     history.length = 0;
     selectedModel = null;
+    selectedRole = null;
     sessionId = "web_" + Math.random().toString(36).slice(2) + Date.now();
     localStorage.setItem(SESSION_KEY, sessionId);
     win.querySelectorAll(".rr-model-btn").forEach((b) => b.classList.remove("selected"));
     modelConfirm.classList.remove("active");
     modelConfirm.setAttribute("disabled", true);
+    rolePicker.style.display = "none";
     modelPicker.style.display = "";
   });
 
