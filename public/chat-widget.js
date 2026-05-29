@@ -201,15 +201,17 @@
       display: block; font-size: 11px; font-weight: 700; color: #4c6ef5;
       text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 6px;
     }
-    .rr-feedback { display: flex; gap: 6px; margin-top: 6px; }
+    .rr-feedback { display: flex; gap: 5px; margin-top: 8px; }
     .rr-feedback button {
-      background: none; border: 1px solid rgba(255,255,255,0.1); border-radius: 20px;
-      padding: 2px 8px; font-size: 13px; cursor: pointer;
-      transition: background 0.15s, border-color 0.15s; color: #8b92a8;
+      background: none; border: 1px solid rgba(255,255,255,0.08); border-radius: 6px;
+      width: 28px; height: 24px; font-size: 12px; cursor: pointer; line-height: 1;
+      display: flex; align-items: center; justify-content: center;
+      transition: background 0.15s, border-color 0.15s, color 0.15s; color: #5a6070;
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
     }
-    .rr-feedback button:hover { background: rgba(255,255,255,0.06); border-color: #4c6ef5; }
-    .rr-feedback button.selected-up { background: rgba(52,168,83,0.15); border-color: #34a853; color: #34a853; }
-    .rr-feedback button.selected-down { background: rgba(234,67,53,0.15); border-color: #ea4335; color: #ea4335; }
+    .rr-feedback button:hover { background: rgba(255,255,255,0.06); border-color: rgba(255,255,255,0.2); color: #dde1f0; }
+    .rr-feedback button.selected-up { background: rgba(52,168,83,0.12); border-color: rgba(52,168,83,0.4); color: #34a853; }
+    .rr-feedback button.selected-down { background: rgba(234,67,53,0.12); border-color: rgba(234,67,53,0.4); color: #ea4335; }
   `;
   document.head.appendChild(style);
 
@@ -393,7 +395,7 @@
     row.className = "rr-feedback";
     const up = document.createElement("button");
     const down = document.createElement("button");
-    up.textContent = "👍"; down.textContent = "👎";
+    up.textContent = "↑"; down.textContent = "↓";
     function submit(rating, btn) {
       btn.classList.add(rating === "up" ? "selected-up" : "selected-down");
       up.disabled = true; down.disabled = true;
