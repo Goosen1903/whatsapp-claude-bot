@@ -32,9 +32,16 @@
     display: flex; flex-direction: column; height: 100%;
     transition: margin-left 0.2s;
   }
-  #sidebar-head { display: flex; align-items: center; gap: 10px; padding: 16px 16px 12px; }
-  #sidebar-head img { height: 26px; filter: brightness(0); }
-  #sidebar-head span { font-weight: 600; font-size: 15px; }
+  #sidebar-head { padding: 20px 18px 14px; }
+  #sidebar-head img { height: 22px; display: block; }
+  /* Embedded on readyrobotics.no the site header already carries the brand */
+  body.embedded #sidebar-head { display: none; }
+  body.embedded #new-chat { margin-top: 14px; }
+  /* The R mark, cropped from the wordmark logo */
+  .mark {
+    display: inline-block; height: 22px; aspect-ratio: 645 / 780;
+    background: url(logo.png) left center / auto 100% no-repeat;
+  }
   #new-chat {
     margin: 4px 12px 12px; padding: 10px 12px; border-radius: 10px;
     border: 1px solid var(--border); background: var(--surface); cursor: pointer;
@@ -50,7 +57,6 @@
   }
   .chat-item:hover { background: rgba(0,0,0,0.05); }
   .chat-item.active { background: rgba(27,37,99,0.09); }
-  .chat-item .ci-icon { flex-shrink: 0; font-size: 13px; }
   .chat-item .ci-title { flex: 1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   .chat-item .ci-del {
     visibility: hidden; background: none; border: none; cursor: pointer;
@@ -58,14 +64,17 @@
   }
   .chat-item:hover .ci-del { visibility: visible; }
   .chat-item .ci-del:hover { color: #c0392b; background: rgba(0,0,0,0.05); }
-  #sidebar-foot { padding: 12px 18px; font-size: 12px; color: var(--muted); border-top: 1px solid var(--border); line-height: 1.5; }
+  #sidebar-foot { padding: 14px 18px; font-size: 12px; color: var(--muted); border-top: 1px solid var(--border); line-height: 1.6; }
+  #sidebar-foot strong { display: block; color: var(--text); font-weight: 600; margin-bottom: 2px; }
+  #sidebar-foot a { color: var(--muted); text-decoration: none; }
+  #sidebar-foot a:hover { color: var(--primary); text-decoration: underline; }
 
   /* Main */
   #main { flex: 1; display: flex; flex-direction: column; height: 100%; min-width: 0; position: relative; }
   #topbar { display: none; align-items: center; gap: 10px; padding: 10px 14px; border-bottom: 1px solid var(--border); background: var(--bg); }
   #topbar button { background: none; border: none; font-size: 20px; cursor: pointer; color: var(--text); padding: 4px 6px; }
   #topbar span { font-weight: 600; flex: 1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-  #scroll { flex: 1; overflow-y: auto; }
+  #scroll { flex: 1; overflow-y: auto; position: relative; }
   .column { max-width: 760px; margin: 0 auto; padding: 0 20px; }
 
   /* Welcome */
@@ -79,7 +88,10 @@
     transition: border-color 0.15s, box-shadow 0.15s;
   }
   .card:hover { border-color: var(--primary); box-shadow: 0 2px 10px rgba(27,37,99,0.08); }
-  .card .c-icon { font-size: 24px; display: block; margin-bottom: 10px; }
+  .card .c-icon {
+    width: 36px; height: 36px; border-radius: 10px; background: var(--primary-soft); color: var(--primary);
+    display: flex; align-items: center; justify-content: center; margin-bottom: 12px;
+  }
   .card .c-title { display: block; font-weight: 600; font-size: 15px; margin-bottom: 4px; }
   .card .c-sub { display: block; font-size: 13px; color: var(--muted); line-height: 1.45; }
 
@@ -124,13 +136,33 @@
   }
   .msg.user img { max-width: 220px; border-radius: 10px; display: block; margin-bottom: 6px; }
   .msg.bot { align-self: stretch; display: flex; gap: 12px; }
-  .msg.bot .avatar {
-    width: 28px; height: 28px; border-radius: 8px; background: var(--primary); flex-shrink: 0;
-    display: flex; align-items: center; justify-content: center; margin-top: 1px;
-    color: #fff; font-weight: 700; font-size: 14px;
-  }
+  .msg.bot .avatar { width: 24px; flex-shrink: 0; padding-top: 1px; }
+  .msg.bot .avatar .mark { height: 24px; }
   .msg.bot .body { flex: 1; min-width: 0; }
   .msg.bot a { color: var(--primary); word-break: break-all; }
+  /* Survey answers shown as a compact card instead of a wall of text */
+  .msg.user.survey { background: var(--surface); border: 1px solid var(--border); padding: 14px 18px; white-space: normal; max-width: 460px; width: 100%; }
+  .survey-card-title { font-size: 12px; font-weight: 600; color: var(--muted); text-transform: uppercase; letter-spacing: 0.04em; margin-bottom: 8px; }
+  .survey-card dl { display: grid; grid-template-columns: auto 1fr; gap: 4px 16px; margin: 0; font-size: 14px; line-height: 1.45; }
+  .survey-card dt { color: var(--muted); }
+  .survey-card dd { margin: 0; }
+  /* Robot suggestions under an advisor reply */
+  .robots { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 10px; margin-top: 16px; white-space: normal; }
+  .msg.bot a.robot, .msg.bot a.cta { word-break: normal; }
+  .robot {
+    display: block; background: var(--surface); border: 1px solid var(--border); border-radius: 12px;
+    padding: 12px 14px; text-decoration: none; color: var(--text); transition: border-color 0.15s;
+  }
+  .robot:hover { border-color: var(--primary); }
+  .robot b { display: block; font-size: 14px; margin-bottom: 2px; }
+  .robot span { display: block; font-size: 12.5px; color: var(--muted); line-height: 1.4; }
+  .robot em { display: block; font-style: normal; font-size: 12.5px; color: var(--primary); margin-top: 6px; font-weight: 500; }
+  .cta {
+    display: inline-flex; align-items: center; gap: 6px; margin-top: 12px;
+    background: var(--primary); color: #fff !important; text-decoration: none; border-radius: 10px;
+    padding: 9px 14px; font-size: 14px; font-weight: 600;
+  }
+  .cta:hover { opacity: 0.9; }
   .followup {
     margin-top: 12px; padding: 10px 14px; border-left: 3px solid var(--primary);
     background: var(--primary-soft); border-radius: 0 10px 10px 0;
@@ -189,13 +221,16 @@
 <body>
   <aside id="sidebar">
     <div id="sidebar-head">
-      <img src="logo.png" alt="" onerror="this.style.display='none'">
-      <span>Support</span>
+      <img src="logo.png" alt="Ready Robotics">
     </div>
     <button id="new-chat"><span class="plus">+</span> Ny samtale</button>
     <div id="chat-list-label">Samtaler</div>
     <div id="chat-list"></div>
-    <div id="sidebar-foot">Trenger du et menneske?<br>info@readyrobotics.no · 40 28 24 44</div>
+    <div id="sidebar-foot">
+      <strong>Snakk med oss</strong>
+      <a href="mailto:info@readyrobotics.no">info@readyrobotics.no</a><br>
+      <a href="tel:+4740282444">40 28 24 44</a>
+    </div>
   </aside>
   <div id="backdrop"></div>
 
@@ -242,6 +277,20 @@
   const RECOMMEND_URL = BASE + "/recommend";
   const FEEDBACK_URL = BASE + "/feedback";
   const STORE_KEY = "rr_support_chats";
+  const SITE = "https://www.readyrobotics.no";
+  const EMBEDDED = window.self !== window.top;
+  if (EMBEDDED) document.body.classList.add("embedded");
+  // Links to the main site replace the whole page when embedded, instead of loading inside the frame
+  const SITE_TARGET = EMBEDDED ? "_top" : "_blank";
+
+  // Product pages on readyrobotics.no, shown as cards when the advisor mentions a robot
+  const ROBOTS = [
+    { name: "Omnie", match: /omnie/i, path: "/omnie", blurb: "Skurer, feier og mopper store harde gulv" },
+    { name: "Mira", match: /\bmira\b/i, path: "/vacuum40", blurb: "Kompakt allrounder for korridorer og møblerte rom" },
+    { name: "Phantas", match: /phantas/i, path: "/phantaspro", blurb: "4-i-1 – den eneste som også støvsuger teppe" },
+    { name: "Beetle", match: /beetle/i, path: "/beetle", blurb: "Feier grovt smuss i lager, industri og utendørs" },
+    { name: "Scrubber 50", match: /scrubber 50|sc50/i, path: "/blank-1-1", blurb: "Dedikert skurerobot for store harde gulv" },
+  ];
 
   const MODELS = ["Omnie", "Phantas", "Scrubber 50", "Beetle", "Mira"];
   const ROLES = [
@@ -250,16 +299,16 @@
   ];
   // Robot advisor survey. "multi" questions allow several answers; "text" is an optional free-text field.
   const SURVEY = [
-    { id: "building", q: "Hva slags lokaler skal rengjøres?", options: ["Kontor", "Lager / logistikk", "Produksjon / industri", "Butikk / kjøpesenter", "Sykehus / helse", "Skole / barnehage", "Hotell", "Flyplass / stasjon", "Utendørs område", "Annet"] },
-    { id: "area", q: "Omtrent hvor stort areal skal roboten rengjøre?", options: ["Under 500 m²", "500–1 500 m²", "1 500–3 000 m²", "3 000–6 000 m²", "Over 6 000 m²"] },
-    { id: "floors", q: "Hvilke gulvtyper har dere?", multi: true, options: ["Teppe", "Vinyl / linoleum", "Fliser / stein", "Betong / epoxy", "Tre / parkett", "Asfalt / utendørs"] },
-    { id: "needs", q: "Hva slags rengjøring trenger dere?", multi: true, options: ["Støvsuging", "Feiing av grovt smuss", "Våtvask / skuring", "Tørrmopping", "Vet ikke – anbefal"] },
-    { id: "dirt", q: "Hvordan vil du beskrive smusset?", options: ["Lett – støv og fotspor", "Middels – daglig trafikk og søl", "Tungt – grus, sagflis, emballasje, olje"] },
-    { id: "layout", q: "Hvordan er lokalene lagt opp?", options: ["Store, åpne flater", "Blanding av åpne flater og korridorer", "Mange smale korridorer og møblerte rom"] },
-    { id: "levels", q: "Skal roboten jobbe på flere etasjer?", options: ["Nei, én etasje", "Ja, og vi har heis", "Ja, men uten heis"] },
-    { id: "timing", q: "Når skal rengjøringen skje?", options: ["Utenfor åpningstid", "I åpningstid, med folk og trafikk rundt", "Begge deler"] },
-    { id: "frequency", q: "Hvor ofte skal det rengjøres?", options: ["Flere ganger daglig", "Daglig", "Noen ganger i uken"] },
-    { id: "notes", q: "Er det noe annet vi bør vite?", text: true, placeholder: "F.eks. terskler, ramper, trange døråpninger, spesielle krav …" },
+    { id: "building", label: "Lokaler", q: "Hva slags lokaler skal rengjøres?", options: ["Kontor", "Lager / logistikk", "Produksjon / industri", "Butikk / kjøpesenter", "Sykehus / helse", "Skole / barnehage", "Hotell", "Flyplass / stasjon", "Utendørs område", "Annet"] },
+    { id: "area", label: "Areal", q: "Omtrent hvor stort areal skal roboten rengjøre?", options: ["Under 500 m²", "500–1 500 m²", "1 500–3 000 m²", "3 000–6 000 m²", "Over 6 000 m²"] },
+    { id: "floors", label: "Gulv", q: "Hvilke gulvtyper har dere?", multi: true, options: ["Teppe", "Vinyl / linoleum", "Fliser / stein", "Betong / epoxy", "Tre / parkett", "Asfalt / utendørs"] },
+    { id: "needs", label: "Behov", q: "Hva slags rengjøring trenger dere?", multi: true, options: ["Støvsuging", "Feiing av grovt smuss", "Våtvask / skuring", "Tørrmopping", "Vet ikke – anbefal"] },
+    { id: "dirt", label: "Smuss", q: "Hvordan vil du beskrive smusset?", options: ["Lett – støv og fotspor", "Middels – daglig trafikk og søl", "Tungt – grus, sagflis, emballasje, olje"] },
+    { id: "layout", label: "Planløsning", q: "Hvordan er lokalene lagt opp?", options: ["Store, åpne flater", "Blanding av åpne flater og korridorer", "Mange smale korridorer og møblerte rom"] },
+    { id: "levels", label: "Etasjer", q: "Skal roboten jobbe på flere etasjer?", options: ["Nei, én etasje", "Ja, og vi har heis", "Ja, men uten heis"] },
+    { id: "timing", label: "Tidspunkt", q: "Når skal rengjøringen skje?", options: ["Utenfor åpningstid", "I åpningstid, med folk og trafikk rundt", "Begge deler"] },
+    { id: "frequency", label: "Hyppighet", q: "Hvor ofte skal det rengjøres?", options: ["Flere ganger daglig", "Daglig", "Noen ganger i uken"] },
+    { id: "notes", label: "Annet", q: "Er det noe annet vi bør vite?", text: true, placeholder: "F.eks. terskler, ramper, trange døråpninger, spesielle krav …" },
   ];
 
   const $ = (id) => document.getElementById(id);
@@ -298,7 +347,7 @@
     chats.forEach((chat) => {
       const item = document.createElement("div");
       item.className = "chat-item" + (chat === current ? " active" : "");
-      item.innerHTML = `<span class="ci-icon">${chat.mode === "advisor" ? "🔍" : "💬"}</span><span class="ci-title"></span><button class="ci-del" title="Slett">✕</button>`;
+      item.innerHTML = `<span class="ci-title"></span><button class="ci-del" title="Slett">✕</button>`;
       item.querySelector(".ci-title").textContent = chat.title || "Ny samtale";
       item.addEventListener("click", () => openChat(chat));
       item.querySelector(".ci-del").addEventListener("click", (e) => {
@@ -323,7 +372,7 @@
     setup = null;
     welcome.innerHTML = "";
     messagesEl.innerHTML = "";
-    chat.messages.forEach((m) => renderMessage(m.role, m.text, m.image));
+    chat.messages.forEach((m) => renderMessage(m.role, m.text, m.image, { survey: m.survey, advisor: m.advisor }));
     $("topbar-title").textContent = chat.title || "Ready Robotics Support";
     renderSidebar();
     closeSidebar();
@@ -357,12 +406,12 @@
         <p class="sub">Still et spørsmål direkte i feltet under, eller velg et av alternativene.</p>
         <div class="cards">
           <button class="card" data-intent="support">
-            <span class="c-icon">🛠️</span>
+            <span class="c-icon"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"/></svg></span>
             <span class="c-title">Hjelp med roboten vår</span>
             <span class="c-sub">Drift, feilmeldinger, vedlikehold og reservedeler</span>
           </button>
           <button class="card" data-intent="advisor">
-            <span class="c-icon">🔍</span>
+            <span class="c-icon"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3"/></svg></span>
             <span class="c-title">Finn riktig robot for oss</span>
             <span class="c-sub">Svar på noen korte spørsmål og få en anbefaling tilpasset lokalene deres</span>
           </button>
@@ -513,10 +562,13 @@
         return a ? { question: step.q, answer: a } : null;
       })
       .filter(Boolean);
+    const card = SURVEY
+      .map((step) => ({ label: step.label, answer: [].concat(setup.answers[step.id] || []).join(", ") }))
+      .filter((a) => a.answer);
     setup = null;
     welcome.innerHTML = "";
     const summary = "Mine svar:\n" + answers.map((a) => `${a.question} ${a.answer}`).join("\n");
-    addMessage("user", summary);
+    addMessage("user", summary, null, { survey: card });
     const building = answers.find((a) => a.question === SURVEY[0].q);
     touch(current, "Robotanbefaling" + (building ? ` – ${building.answer.toLowerCase()}` : ""));
     await stream(RECOMMEND_URL, { sessionId: current.id, answers }, "Finner riktig robot …");
@@ -536,13 +588,24 @@
   function renderMessage(role, text, image, opts = {}) {
     const div = document.createElement("div");
     div.className = "msg " + role;
-    if (role === "user") {
+    if (role === "user" && opts.survey) {
+      div.classList.add("survey", "survey-card");
+      div.innerHTML = `<div class="survey-card-title">Dine svar</div><dl></dl>`;
+      const dl = div.querySelector("dl");
+      opts.survey.forEach((a) => {
+        const dt = document.createElement("dt"), dd = document.createElement("dd");
+        dt.textContent = a.label; dd.textContent = a.answer;
+        dl.append(dt, dd);
+      });
+    } else if (role === "user") {
       if (image) { const img = document.createElement("img"); img.src = image; div.appendChild(img); }
       if (text) div.appendChild(document.createTextNode(text));
     } else {
-      div.innerHTML = `<div class="avatar">R</div><div class="body"></div>`;
-      fillBot(div.querySelector(".body"), text);
-      if (!opts.noFeedback) addFeedback(div.querySelector(".body"), text);
+      div.innerHTML = `<div class="avatar"><span class="mark"></span></div><div class="body"></div>`;
+      const body = div.querySelector(".body");
+      fillBot(body, text);
+      if (opts.advisor) addRobotCards(body, text);
+      if (!opts.noFeedback) addFeedback(body, text);
     }
     messagesEl.appendChild(div);
     return div;
@@ -559,6 +622,36 @@
     } else {
       body.innerHTML = linkify(escapeHtml(text));
     }
+  }
+
+  function addRobotCards(body, text) {
+    const mentioned = ROBOTS
+      .map((r) => ({ ...r, at: text.search(r.match) }))
+      .filter((r) => r.at >= 0)
+      .sort((a, b) => a.at - b.at)
+      .slice(0, 3);
+    if (mentioned.length) {
+      const grid = document.createElement("div");
+      grid.className = "robots";
+      mentioned.forEach((r) => {
+        const a = document.createElement("a");
+        a.className = "robot";
+        a.href = SITE + r.path;
+        a.target = SITE_TARGET;
+        a.rel = "noopener";
+        a.innerHTML = `<b></b><span></span><em>Se ${r.name} →</em>`;
+        a.querySelector("b").textContent = r.name;
+        a.querySelector("span").textContent = r.blurb;
+        grid.appendChild(a);
+      });
+      body.appendChild(grid);
+    }
+    const cta = document.createElement("a");
+    cta.className = "cta";
+    cta.href = SITE + "/kontakt";
+    cta.target = SITE_TARGET;
+    cta.textContent = "Book gratis befaring →";
+    body.appendChild(cta);
   }
 
   function addFeedback(body, text) {
@@ -585,12 +678,17 @@
 
   function addMessage(role, text, image, opts) {
     // Images are shown but not persisted (localStorage size)
-    current.messages.push({ role, text: text || (image ? "[bilde]" : "") });
+    current.messages.push({ role, text: text || (image ? "[bilde]" : ""), ...(opts && opts.survey ? { survey: opts.survey } : {}) });
     renderMessage(role, text, image, opts);
     scrollToBottom();
   }
 
   function scrollToBottom() { scrollEl.scrollTop = scrollEl.scrollHeight; }
+  // Scroll with a growing reply until its first line reaches the top, so long answers are read from the start
+  function followReply(el) {
+    const maxTop = el.offsetTop - 24;
+    scrollEl.scrollTop = Math.min(scrollEl.scrollHeight, Math.max(scrollEl.scrollTop, Math.min(maxTop, scrollEl.scrollHeight - scrollEl.clientHeight)));
+  }
 
   // ---------- Sending / streaming ----------
   async function stream(url, body, statusLabel) {
@@ -631,14 +729,20 @@
             status.remove();
             live.style.display = "";
             liveBody.innerHTML = linkify(escapeHtml(reply));
-            scrollToBottom();
+            followReply(live);
           } catch {}
         }
       }
       live.remove();
       status.remove();
-      chat.messages.push({ role: "bot", text: reply });
-      if (chat === current) { renderMessage("bot", reply); scrollToBottom(); }
+      const advisor = chat.mode === "advisor";
+      chat.messages.push({ role: "bot", text: reply, ...(advisor ? { advisor: true } : {}) });
+      if (chat === current) {
+        const top = scrollEl.scrollTop;
+        renderMessage("bot", reply, null, { advisor });
+        scrollEl.scrollTop = top;
+        followReply(messagesEl.lastElementChild);
+      }
       touch(chat);
     } catch (err) {
       status.remove();
@@ -721,6 +825,7 @@
   });
 
   startNewChat();
+  updateSend();
 })();
 </script>
 </body>
