@@ -1,0 +1,727 @@
+<!DOCTYPE html>
+<html lang="no">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Ready Robotics Support</title>
+<style>
+  :root {
+    --primary: #1B2563;
+    --primary-soft: #eef0fa;
+    --bg: #faf9f7;
+    --sidebar: #f1efeb;
+    --surface: #ffffff;
+    --border: #e4e1db;
+    --text: #1f1f1f;
+    --muted: #6b6b6b;
+    --faint: #9a978f;
+  }
+  * { box-sizing: border-box; }
+  html, body { height: 100%; margin: 0; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    font-size: 15px; color: var(--text); background: var(--bg);
+    display: flex; overflow: hidden;
+  }
+  button { font-family: inherit; }
+
+  /* Sidebar */
+  #sidebar {
+    width: 272px; flex-shrink: 0; background: var(--sidebar);
+    border-right: 1px solid var(--border);
+    display: flex; flex-direction: column; height: 100%;
+    transition: margin-left 0.2s;
+  }
+  #sidebar-head { display: flex; align-items: center; gap: 10px; padding: 16px 16px 12px; }
+  #sidebar-head img { height: 26px; filter: brightness(0); }
+  #sidebar-head span { font-weight: 600; font-size: 15px; }
+  #new-chat {
+    margin: 4px 12px 12px; padding: 10px 12px; border-radius: 10px;
+    border: 1px solid var(--border); background: var(--surface); cursor: pointer;
+    display: flex; align-items: center; gap: 8px; font-size: 14px; font-weight: 500; color: var(--text);
+  }
+  #new-chat:hover { border-color: var(--primary); }
+  #new-chat .plus { font-size: 18px; line-height: 1; color: var(--primary); }
+  #chat-list-label { padding: 8px 18px 6px; font-size: 12px; color: var(--faint); font-weight: 500; }
+  #chat-list { flex: 1; overflow-y: auto; padding: 0 8px 12px; }
+  .chat-item {
+    display: flex; align-items: center; gap: 8px;
+    padding: 8px 10px; border-radius: 8px; cursor: pointer; font-size: 14px; color: var(--text);
+  }
+  .chat-item:hover { background: rgba(0,0,0,0.05); }
+  .chat-item.active { background: rgba(27,37,99,0.09); }
+  .chat-item .ci-icon { flex-shrink: 0; font-size: 13px; }
+  .chat-item .ci-title { flex: 1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .chat-item .ci-del {
+    visibility: hidden; background: none; border: none; cursor: pointer;
+    color: var(--faint); font-size: 13px; padding: 2px 4px; border-radius: 4px;
+  }
+  .chat-item:hover .ci-del { visibility: visible; }
+  .chat-item .ci-del:hover { color: #c0392b; background: rgba(0,0,0,0.05); }
+  #sidebar-foot { padding: 12px 18px; font-size: 12px; color: var(--muted); border-top: 1px solid var(--border); line-height: 1.5; }
+
+  /* Main */
+  #main { flex: 1; display: flex; flex-direction: column; height: 100%; min-width: 0; position: relative; }
+  #topbar { display: none; align-items: center; gap: 10px; padding: 10px 14px; border-bottom: 1px solid var(--border); background: var(--bg); }
+  #topbar button { background: none; border: none; font-size: 20px; cursor: pointer; color: var(--text); padding: 4px 6px; }
+  #topbar span { font-weight: 600; flex: 1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  #scroll { flex: 1; overflow-y: auto; }
+  .column { max-width: 760px; margin: 0 auto; padding: 0 20px; }
+
+  /* Welcome */
+  #welcome { padding-top: 12vh; padding-bottom: 32px; }
+  #welcome h1 { font-size: 30px; font-weight: 500; margin: 0 0 8px; letter-spacing: -0.01em; }
+  #welcome .sub { color: var(--muted); margin: 0 0 28px; }
+  .cards { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+  .card {
+    background: var(--surface); border: 1px solid var(--border); border-radius: 14px;
+    padding: 18px; cursor: pointer; text-align: left; color: var(--text);
+    transition: border-color 0.15s, box-shadow 0.15s;
+  }
+  .card:hover { border-color: var(--primary); box-shadow: 0 2px 10px rgba(27,37,99,0.08); }
+  .card .c-icon { font-size: 24px; display: block; margin-bottom: 10px; }
+  .card .c-title { display: block; font-weight: 600; font-size: 15px; margin-bottom: 4px; }
+  .card .c-sub { display: block; font-size: 13px; color: var(--muted); line-height: 1.45; }
+
+  .setup { margin-top: 8px; }
+  .setup h2 { font-size: 17px; font-weight: 600; margin: 0 0 12px; }
+  .setup .step-label { font-size: 13px; color: var(--muted); margin: 20px 0 8px; }
+  .chips { display: flex; flex-wrap: wrap; gap: 8px; }
+  .chip {
+    background: var(--surface); border: 1px solid var(--border); border-radius: 999px;
+    padding: 8px 14px; font-size: 14px; cursor: pointer; color: var(--text);
+    transition: border-color 0.15s, background 0.15s;
+  }
+  .chip:hover { border-color: var(--primary); }
+  .chip.selected { border-color: var(--primary); background: var(--primary-soft); color: var(--primary); font-weight: 600; }
+  .link-btn { background: none; border: none; color: var(--muted); cursor: pointer; font-size: 13px; padding: 0; margin-bottom: 18px; }
+  .link-btn:hover { color: var(--primary); }
+  .primary-btn {
+    background: var(--primary); color: #fff; border: none; border-radius: 10px;
+    padding: 11px 18px; font-size: 14px; font-weight: 600; cursor: pointer; margin-top: 20px;
+  }
+  .primary-btn:disabled { opacity: 0.35; cursor: default; }
+
+  /* Survey */
+  .survey-top { display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; }
+  .survey-top .count { font-size: 12px; color: var(--faint); }
+  .progress { height: 4px; background: var(--border); border-radius: 2px; overflow: hidden; margin-bottom: 24px; }
+  .progress div { height: 100%; background: var(--primary); transition: width 0.25s; }
+  .survey-q { font-size: 20px; font-weight: 500; margin: 0 0 6px; }
+  .survey-hint { font-size: 13px; color: var(--muted); margin: 0 0 16px; }
+  .survey-text {
+    width: 100%; min-height: 96px; border: 1px solid var(--border); border-radius: 12px;
+    padding: 12px 14px; font: inherit; resize: vertical; background: var(--surface);
+  }
+  .survey-text:focus { outline: none; border-color: var(--primary); }
+
+  /* Messages */
+  #messages { padding-top: 28px; padding-bottom: 24px; display: flex; flex-direction: column; gap: 22px; }
+  .msg { line-height: 1.6; white-space: pre-wrap; word-break: break-word; }
+  .msg.user {
+    align-self: flex-end; max-width: 80%;
+    background: #ece9e3; padding: 10px 16px; border-radius: 18px;
+  }
+  .msg.user img { max-width: 220px; border-radius: 10px; display: block; margin-bottom: 6px; }
+  .msg.bot { align-self: stretch; display: flex; gap: 12px; }
+  .msg.bot .avatar {
+    width: 28px; height: 28px; border-radius: 8px; background: var(--primary); flex-shrink: 0;
+    display: flex; align-items: center; justify-content: center; margin-top: 1px;
+    color: #fff; font-weight: 700; font-size: 14px;
+  }
+  .msg.bot .body { flex: 1; min-width: 0; }
+  .msg.bot a { color: var(--primary); word-break: break-all; }
+  .followup {
+    margin-top: 12px; padding: 10px 14px; border-left: 3px solid var(--primary);
+    background: var(--primary-soft); border-radius: 0 10px 10px 0;
+  }
+  .feedback { display: flex; gap: 4px; margin-top: 8px; }
+  .feedback button {
+    background: none; border: none; border-radius: 6px; width: 28px; height: 26px;
+    cursor: pointer; color: var(--faint); display: flex; align-items: center; justify-content: center;
+  }
+  .feedback button:hover { background: rgba(0,0,0,0.05); color: var(--text); }
+  .feedback button.up { color: #2e8b57; }
+  .feedback button.down { color: #c0392b; }
+  .status { display: flex; align-items: center; gap: 8px; color: var(--muted); font-size: 14px; }
+  .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--primary); animation: pulse 1.4s ease-in-out infinite; }
+  @keyframes pulse { 0%,100% { opacity: 0.3; transform: scale(0.7); } 50% { opacity: 1; transform: scale(1); } }
+
+  /* Composer */
+  #composer-wrap { padding: 8px 0 18px; background: var(--bg); }
+  #composer {
+    background: var(--surface); border: 1px solid var(--border); border-radius: 18px;
+    box-shadow: 0 2px 12px rgba(0,0,0,0.04); padding: 10px 10px 10px 14px;
+  }
+  #composer:focus-within { border-color: #c9c5bd; }
+  #img-preview { display: none; align-items: center; gap: 10px; margin-bottom: 8px; }
+  #img-preview img { width: 52px; height: 52px; object-fit: cover; border-radius: 8px; border: 1px solid var(--border); }
+  #img-preview span { font-size: 12px; color: var(--muted); flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  #img-preview button { background: none; border: none; cursor: pointer; color: var(--muted); }
+  #composer-row { display: flex; align-items: flex-end; gap: 8px; }
+  #input {
+    flex: 1; border: none; outline: none; resize: none; font: inherit; line-height: 1.5;
+    max-height: 200px; padding: 6px 0; background: transparent; color: var(--text);
+  }
+  .icon-btn {
+    width: 34px; height: 34px; border-radius: 10px; border: none; cursor: pointer; flex-shrink: 0;
+    display: flex; align-items: center; justify-content: center; background: none; color: var(--muted);
+  }
+  .icon-btn:hover { background: rgba(0,0,0,0.05); color: var(--text); }
+  #send { background: var(--primary); color: #fff; }
+  #send:hover { background: var(--primary); opacity: 0.9; }
+  #send:disabled { opacity: 0.3; cursor: default; }
+  #disclaimer { text-align: center; font-size: 12px; color: var(--faint); margin-top: 8px; }
+
+  #backdrop { display: none; }
+  @media (max-width: 780px) {
+    #sidebar { position: fixed; z-index: 20; left: 0; top: 0; bottom: 0; margin-left: -272px; }
+    body.sidebar-open #sidebar { margin-left: 0; box-shadow: 0 0 30px rgba(0,0,0,0.2); }
+    body.sidebar-open #backdrop { display: block; position: fixed; inset: 0; z-index: 10; background: rgba(0,0,0,0.25); }
+    #topbar { display: flex; }
+    .cards { grid-template-columns: 1fr; }
+    #welcome { padding-top: 6vh; }
+    #welcome h1 { font-size: 24px; }
+    .column { padding: 0 16px; }
+  }
+</style>
+</head>
+<body>
+  <aside id="sidebar">
+    <div id="sidebar-head">
+      <img src="logo.png" alt="" onerror="this.style.display='none'">
+      <span>Support</span>
+    </div>
+    <button id="new-chat"><span class="plus">+</span> Ny samtale</button>
+    <div id="chat-list-label">Samtaler</div>
+    <div id="chat-list"></div>
+    <div id="sidebar-foot">Trenger du et menneske?<br>info@readyrobotics.no · 40 28 24 44</div>
+  </aside>
+  <div id="backdrop"></div>
+
+  <main id="main">
+    <div id="topbar">
+      <button id="menu-btn" aria-label="Meny">☰</button>
+      <span id="topbar-title">Ready Robotics Support</span>
+      <button id="topbar-new" aria-label="Ny samtale">＋</button>
+    </div>
+    <div id="scroll">
+      <div class="column" id="welcome"></div>
+      <div class="column" id="messages"></div>
+    </div>
+    <div id="composer-wrap">
+      <div class="column">
+        <div id="composer">
+          <div id="img-preview">
+            <img id="img-thumb" alt="">
+            <span id="img-name"></span>
+            <button id="img-remove" aria-label="Fjern bilde">✕</button>
+          </div>
+          <div id="composer-row">
+            <button class="icon-btn" id="attach" title="Last opp bilde">
+              <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/></svg>
+            </button>
+            <input type="file" id="file" accept="image/*" hidden>
+            <textarea id="input" rows="1" placeholder="Skriv et spørsmål …"></textarea>
+            <button class="icon-btn" id="send" title="Send">
+              <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M12 19V5M5 12l7-7 7 7"/></svg>
+            </button>
+          </div>
+        </div>
+        <div id="disclaimer">Svarene er basert på Gausium-manualene og kan inneholde feil. Kontakt oss ved tvil.</div>
+      </div>
+    </div>
+  </main>
+
+<script>
+(function () {
+  // Same origin when served from the bot server; fall back to production when embedded as raw HTML
+  const BASE = location.origin && location.origin !== "null" && location.protocol.startsWith("http")
+    ? location.origin : "https://api.readyrobotics.no";
+  const CHAT_URL = BASE + "/chat";
+  const RECOMMEND_URL = BASE + "/recommend";
+  const FEEDBACK_URL = BASE + "/feedback";
+  const STORE_KEY = "rr_support_chats";
+
+  const MODELS = ["Omnie", "Phantas", "Scrubber 50", "Beetle", "Mira"];
+  const ROLES = [
+    { id: "servicetekniker", label: "🔧 Servicetekniker" },
+    { id: "renholder/placemaker", label: "🧹 Renholder / Placemaker" },
+  ];
+  // Robot advisor survey. "multi" questions allow several answers; "text" is an optional free-text field.
+  const SURVEY = [
+    { id: "building", q: "Hva slags lokaler skal rengjøres?", options: ["Kontor", "Lager / logistikk", "Produksjon / industri", "Butikk / kjøpesenter", "Sykehus / helse", "Skole / barnehage", "Hotell", "Flyplass / stasjon", "Utendørs område", "Annet"] },
+    { id: "area", q: "Omtrent hvor stort areal skal roboten rengjøre?", options: ["Under 500 m²", "500–1 500 m²", "1 500–3 000 m²", "3 000–6 000 m²", "Over 6 000 m²"] },
+    { id: "floors", q: "Hvilke gulvtyper har dere?", multi: true, options: ["Teppe", "Vinyl / linoleum", "Fliser / stein", "Betong / epoxy", "Tre / parkett", "Asfalt / utendørs"] },
+    { id: "needs", q: "Hva slags rengjøring trenger dere?", multi: true, options: ["Støvsuging", "Feiing av grovt smuss", "Våtvask / skuring", "Tørrmopping", "Vet ikke – anbefal"] },
+    { id: "dirt", q: "Hvordan vil du beskrive smusset?", options: ["Lett – støv og fotspor", "Middels – daglig trafikk og søl", "Tungt – grus, sagflis, emballasje, olje"] },
+    { id: "layout", q: "Hvordan er lokalene lagt opp?", options: ["Store, åpne flater", "Blanding av åpne flater og korridorer", "Mange smale korridorer og møblerte rom"] },
+    { id: "levels", q: "Skal roboten jobbe på flere etasjer?", options: ["Nei, én etasje", "Ja, og vi har heis", "Ja, men uten heis"] },
+    { id: "timing", q: "Når skal rengjøringen skje?", options: ["Utenfor åpningstid", "I åpningstid, med folk og trafikk rundt", "Begge deler"] },
+    { id: "frequency", q: "Hvor ofte skal det rengjøres?", options: ["Flere ganger daglig", "Daglig", "Noen ganger i uken"] },
+    { id: "notes", q: "Er det noe annet vi bør vite?", text: true, placeholder: "F.eks. terskler, ramper, trange døråpninger, spesielle krav …" },
+  ];
+
+  const $ = (id) => document.getElementById(id);
+  const welcome = $("welcome"), messagesEl = $("messages"), scrollEl = $("scroll");
+  const input = $("input"), sendBtn = $("send");
+
+  // ---------- Storage ----------
+  let chats = [];
+  try { chats = JSON.parse(localStorage.getItem(STORE_KEY) || "[]"); } catch {}
+  function persist() {
+    try { localStorage.setItem(STORE_KEY, JSON.stringify(chats.slice(0, 50))); } catch {}
+  }
+  function newChatObj() {
+    return { id: "web_" + Math.random().toString(36).slice(2) + Date.now(), title: "", mode: null, messages: [], updated: Date.now() };
+  }
+
+  let current = newChatObj();
+  let busy = false;
+  let setup = null; // welcome-screen step state
+
+  function isSaved(chat) { return chats.includes(chat); }
+  function touch(chat, title) {
+    if (title && !chat.title) chat.title = title.slice(0, 60);
+    chat.updated = Date.now();
+    if (!isSaved(chat)) chats.unshift(chat);
+    chats.sort((a, b) => b.updated - a.updated);
+    persist();
+    renderSidebar();
+  }
+
+  // ---------- Sidebar ----------
+  function renderSidebar() {
+    const list = $("chat-list");
+    list.innerHTML = "";
+    $("chat-list-label").style.display = chats.length ? "" : "none";
+    chats.forEach((chat) => {
+      const item = document.createElement("div");
+      item.className = "chat-item" + (chat === current ? " active" : "");
+      item.innerHTML = `<span class="ci-icon">${chat.mode === "advisor" ? "🔍" : "💬"}</span><span class="ci-title"></span><button class="ci-del" title="Slett">✕</button>`;
+      item.querySelector(".ci-title").textContent = chat.title || "Ny samtale";
+      item.addEventListener("click", () => openChat(chat));
+      item.querySelector(".ci-del").addEventListener("click", (e) => {
+        e.stopPropagation();
+        chats = chats.filter((c) => c !== chat);
+        persist();
+        if (chat === current) startNewChat(); else renderSidebar();
+      });
+      list.appendChild(item);
+    });
+  }
+
+  function closeSidebar() { document.body.classList.remove("sidebar-open"); }
+  $("menu-btn").addEventListener("click", () => document.body.classList.add("sidebar-open"));
+  $("backdrop").addEventListener("click", closeSidebar);
+  $("new-chat").addEventListener("click", () => { startNewChat(); closeSidebar(); });
+  $("topbar-new").addEventListener("click", startNewChat);
+
+  function openChat(chat) {
+    if (busy) return;
+    current = chat;
+    setup = null;
+    welcome.innerHTML = "";
+    messagesEl.innerHTML = "";
+    chat.messages.forEach((m) => renderMessage(m.role, m.text, m.image));
+    $("topbar-title").textContent = chat.title || "Ready Robotics Support";
+    renderSidebar();
+    closeSidebar();
+    scrollToBottom();
+  }
+
+  function startNewChat() {
+    if (busy) return;
+    current = newChatObj();
+    messagesEl.innerHTML = "";
+    $("topbar-title").textContent = "Ready Robotics Support";
+    setup = { step: "intent" };
+    renderWelcome();
+    renderSidebar();
+    input.focus();
+  }
+
+  // ---------- Welcome / setup ----------
+  function greetingByTime() {
+    const h = new Date().getHours();
+    return h < 10 ? "God morgen" : h < 17 ? "Hei" : "God kveld";
+  }
+
+  function renderWelcome() {
+    welcome.innerHTML = "";
+    if (!setup) return;
+
+    if (setup.step === "intent") {
+      welcome.innerHTML = `
+        <h1>${greetingByTime()}! Hva kan vi hjelpe deg med?</h1>
+        <p class="sub">Still et spørsmål direkte i feltet under, eller velg et av alternativene.</p>
+        <div class="cards">
+          <button class="card" data-intent="support">
+            <span class="c-icon">🛠️</span>
+            <span class="c-title">Hjelp med roboten vår</span>
+            <span class="c-sub">Drift, feilmeldinger, vedlikehold og reservedeler</span>
+          </button>
+          <button class="card" data-intent="advisor">
+            <span class="c-icon">🔍</span>
+            <span class="c-title">Finn riktig robot for oss</span>
+            <span class="c-sub">Svar på noen korte spørsmål og få en anbefaling tilpasset lokalene deres</span>
+          </button>
+        </div>`;
+      welcome.querySelectorAll(".card").forEach((c) => c.addEventListener("click", () => {
+        if (c.dataset.intent === "advisor") {
+          current.mode = "advisor";
+          setup = { step: "survey", index: 0, answers: {} };
+        } else {
+          current.mode = "support";
+          setup = { step: "support", model: undefined, role: undefined };
+        }
+        renderWelcome();
+      }));
+      return;
+    }
+
+    if (setup.step === "support") {
+      welcome.innerHTML = `
+        <div class="setup">
+          <button class="link-btn" id="setup-back">← Tilbake</button>
+          <h2>Litt om deg, så får du mer presise svar</h2>
+          <div class="step-label">Hvilken robot gjelder det?</div>
+          <div class="chips" id="model-chips"></div>
+          <div class="step-label">Hvem er du?</div>
+          <div class="chips" id="role-chips"></div>
+          <button class="primary-btn" id="setup-go" disabled>Start samtalen →</button>
+        </div>`;
+      const models = [...MODELS, "Vet ikke"];
+      const mc = $("model-chips"), rc = $("role-chips"), go = $("setup-go");
+      const refresh = () => { go.disabled = setup.model === undefined || !setup.role; };
+      models.forEach((m) => {
+        const b = chip(m, setup.model === (m === "Vet ikke" ? "" : m));
+        b.addEventListener("click", () => {
+          setup.model = m === "Vet ikke" ? "" : m;
+          mc.querySelectorAll(".chip").forEach((x) => x.classList.toggle("selected", x === b));
+          refresh();
+        });
+        mc.appendChild(b);
+      });
+      ROLES.forEach((r) => {
+        const b = chip(r.label, setup.role === r.id);
+        b.addEventListener("click", () => {
+          setup.role = r.id;
+          rc.querySelectorAll(".chip").forEach((x) => x.classList.toggle("selected", x === b));
+          refresh();
+        });
+        rc.appendChild(b);
+      });
+      $("setup-back").addEventListener("click", () => { current.mode = null; setup = { step: "intent" }; renderWelcome(); });
+      go.addEventListener("click", startSupport);
+      return;
+    }
+
+    if (setup.step === "survey") renderSurvey();
+  }
+
+  function chip(label, selected) {
+    const b = document.createElement("button");
+    b.className = "chip" + (selected ? " selected" : "");
+    b.textContent = label;
+    return b;
+  }
+
+  function startSupport() {
+    const { model, role } = setup;
+    current.model = model;
+    current.role = role;
+    const silent = [model ? `Jeg bruker ${model}.` : null, `Jeg er ${role}.`].filter(Boolean).join(" ");
+    fetch(CHAT_URL, {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ message: silent, sessionId: current.id, silent: true }),
+    }).catch(() => {});
+    setup = null;
+    welcome.innerHTML = "";
+    const roleLabel = role === "servicetekniker" ? "servicetekniker" : "renholder/placemaker";
+    const greeting = `Hei! Jeg er Ready Robotics sin supportassistent. Jeg ser du er ${roleLabel}${model ? ` for ${model}` : ""} — hva kan jeg hjelpe deg med?`;
+    addMessage("bot", greeting, null, { noFeedback: true });
+    touch(current, model ? `${model} – support` : "Support");
+    input.focus();
+  }
+
+  function renderSurvey() {
+    const step = SURVEY[setup.index];
+    const isLast = setup.index === SURVEY.length - 1;
+    const answer = setup.answers[step.id];
+    welcome.innerHTML = `
+      <div class="setup">
+        <div class="survey-top">
+          <button class="link-btn" id="survey-back" style="margin:0">← Tilbake</button>
+          <span class="count">${setup.index + 1} av ${SURVEY.length}</span>
+        </div>
+        <div class="progress"><div style="width:${(setup.index / SURVEY.length) * 100}%"></div></div>
+        <p class="survey-q"></p>
+        <p class="survey-hint">${step.multi ? "Velg en eller flere" : step.text ? "Valgfritt" : "&nbsp;"}</p>
+        <div class="chips" id="survey-options"></div>
+        <button class="primary-btn" id="survey-next">${isLast ? "Få anbefaling →" : "Neste →"}</button>
+      </div>`;
+    welcome.querySelector(".survey-q").textContent = step.q;
+    const opts = $("survey-options"), next = $("survey-next");
+
+    if (step.text) {
+      const ta = document.createElement("textarea");
+      ta.className = "survey-text";
+      ta.placeholder = step.placeholder || "";
+      ta.value = answer || "";
+      ta.addEventListener("input", () => { setup.answers[step.id] = ta.value.trim(); });
+      opts.replaceWith(ta);
+      ta.focus();
+    } else {
+      const picked = [].concat(answer || []);
+      step.options.forEach((opt) => {
+        const b = chip(opt, picked.includes(opt));
+        b.addEventListener("click", () => {
+          if (step.multi) {
+            b.classList.toggle("selected");
+            setup.answers[step.id] = [...opts.querySelectorAll(".selected")].map((x) => x.textContent);
+            next.disabled = setup.answers[step.id].length === 0;
+          } else {
+            setup.answers[step.id] = opt;
+            advanceSurvey();
+          }
+        });
+        opts.appendChild(b);
+      });
+      next.disabled = picked.length === 0;
+      // Single-choice questions advance on click; only show the button when revisiting an answered one
+      if (!step.multi && !answer) next.style.display = "none";
+    }
+
+    next.addEventListener("click", advanceSurvey);
+    $("survey-back").addEventListener("click", () => {
+      if (setup.index === 0) { current.mode = null; setup = { step: "intent" }; }
+      else setup.index--;
+      renderWelcome();
+    });
+  }
+
+  function advanceSurvey() {
+    if (setup.index < SURVEY.length - 1) { setup.index++; renderSurvey(); }
+    else finishSurvey();
+  }
+
+  async function finishSurvey() {
+    const answers = SURVEY
+      .map((step) => {
+        const a = [].concat(setup.answers[step.id] || []).join(", ");
+        return a ? { question: step.q, answer: a } : null;
+      })
+      .filter(Boolean);
+    setup = null;
+    welcome.innerHTML = "";
+    const summary = "Mine svar:\n" + answers.map((a) => `${a.question} ${a.answer}`).join("\n");
+    addMessage("user", summary);
+    const building = answers.find((a) => a.question === SURVEY[0].q);
+    touch(current, "Robotanbefaling" + (building ? ` – ${building.answer.toLowerCase()}` : ""));
+    await stream(RECOMMEND_URL, { sessionId: current.id, answers }, "Finner riktig robot …");
+  }
+
+  // ---------- Messages ----------
+  function escapeHtml(s) { return s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;"); }
+  function linkify(s) {
+    return s.replace(/(https?:\/\/[^\s]+)/g, (u) => `<a href="${u}" target="_blank" rel="noopener noreferrer">${u}</a>`);
+  }
+  function isQuestion(t) {
+    t = t.trim();
+    if (t.startsWith("http") || t.startsWith("(Source:") || t.startsWith("(Kilde:")) return false;
+    return t.endsWith("?");
+  }
+
+  function renderMessage(role, text, image, opts = {}) {
+    const div = document.createElement("div");
+    div.className = "msg " + role;
+    if (role === "user") {
+      if (image) { const img = document.createElement("img"); img.src = image; div.appendChild(img); }
+      if (text) div.appendChild(document.createTextNode(text));
+    } else {
+      div.innerHTML = `<div class="avatar">R</div><div class="body"></div>`;
+      fillBot(div.querySelector(".body"), text);
+      if (!opts.noFeedback) addFeedback(div.querySelector(".body"), text);
+    }
+    messagesEl.appendChild(div);
+    return div;
+  }
+
+  // Render bot text; a trailing question gets highlighted as a follow-up
+  function fillBot(body, text) {
+    const parts = text.trim().split(/\n+/);
+    const last = parts[parts.length - 1] || "";
+    const main = parts.slice(0, -1).join("\n");
+    if (parts.length > 1 && main.length > 80 && isQuestion(last)) {
+      body.innerHTML = linkify(escapeHtml(text.trim().slice(0, text.trim().lastIndexOf(last)).trimEnd()))
+        + `<div class="followup">${linkify(escapeHtml(last))}</div>`;
+    } else {
+      body.innerHTML = linkify(escapeHtml(text));
+    }
+  }
+
+  function addFeedback(body, text) {
+    const row = document.createElement("div");
+    row.className = "feedback";
+    const thumb = `<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 9V5a3 3 0 0 0-3-3l-4 9v11h11.28a2 2 0 0 0 2-1.7l1.38-9a2 2 0 0 0-2-2.3H14z"/><path d="M7 22H4a2 2 0 0 1-2-2v-7a2 2 0 0 1 2-2h3"/></svg>`;
+    const up = document.createElement("button"), down = document.createElement("button");
+    up.innerHTML = thumb; up.title = "Nyttig";
+    down.innerHTML = `<span style="display:inline-flex;transform:rotate(180deg)">${thumb}</span>`; down.title = "Ikke nyttig";
+    const sessionId = current.id;
+    const submit = (rating, btn) => {
+      btn.classList.add(rating);
+      up.disabled = down.disabled = true;
+      fetch(FEEDBACK_URL, {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ sessionId, messageId: Date.now().toString(36), rating, message: text }),
+      }).catch(() => {});
+    };
+    up.addEventListener("click", () => submit("up", up));
+    down.addEventListener("click", () => submit("down", down));
+    row.append(up, down);
+    body.appendChild(row);
+  }
+
+  function addMessage(role, text, image, opts) {
+    // Images are shown but not persisted (localStorage size)
+    current.messages.push({ role, text: text || (image ? "[bilde]" : "") });
+    renderMessage(role, text, image, opts);
+    scrollToBottom();
+  }
+
+  function scrollToBottom() { scrollEl.scrollTop = scrollEl.scrollHeight; }
+
+  // ---------- Sending / streaming ----------
+  async function stream(url, body, statusLabel) {
+    busy = true;
+    sendBtn.disabled = true;
+    const chat = current;
+    const status = document.createElement("div");
+    status.className = "status";
+    status.innerHTML = `<span class="dot"></span><span></span>`;
+    status.lastChild.textContent = statusLabel;
+    messagesEl.appendChild(status);
+    scrollToBottom();
+
+    let reply = "";
+    try {
+      const res = await fetch(url, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
+      if (res.status === 429) throw new Error("rate");
+      if (!res.ok) throw new Error(res.status);
+
+      const live = renderMessage("bot", "", null, { noFeedback: true });
+      live.style.display = "none";
+      const liveBody = live.querySelector(".body");
+      const reader = res.body.getReader();
+      const decoder = new TextDecoder();
+      let buffer = "";
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        buffer += decoder.decode(value, { stream: true });
+        const lines = buffer.split("\n");
+        buffer = lines.pop();
+        for (const line of lines) {
+          if (!line.startsWith("data: ")) continue;
+          const data = line.slice(6).trim();
+          if (data === "[DONE]") continue;
+          try {
+            reply += JSON.parse(data).text;
+            status.remove();
+            live.style.display = "";
+            liveBody.innerHTML = linkify(escapeHtml(reply));
+            scrollToBottom();
+          } catch {}
+        }
+      }
+      live.remove();
+      status.remove();
+      chat.messages.push({ role: "bot", text: reply });
+      if (chat === current) { renderMessage("bot", reply); scrollToBottom(); }
+      touch(chat);
+    } catch (err) {
+      status.remove();
+      const msg = err.message === "rate"
+        ? "Du har sendt for mange meldinger. Vent litt før du prøver igjen."
+        : "Kunne ikke nå serveren. Prøv igjen.";
+      if (chat === current) renderMessage("bot", msg, null, { noFeedback: true });
+    }
+    busy = false;
+    updateSend();
+    input.focus();
+  }
+
+  let pendingImage = null;
+
+  async function send() {
+    const text = input.value.trim();
+    if ((!text && !pendingImage) || busy) return;
+    // Typing straight from the welcome screen starts a plain support chat
+    if (setup) { setup = null; welcome.innerHTML = ""; if (!current.mode) current.mode = "support"; }
+    input.value = "";
+    autosize();
+    const image = pendingImage;
+    clearImage();
+    addMessage("user", text, image && image.previewUrl);
+    touch(current, text || "Bilde");
+    $("topbar-title").textContent = current.title;
+    const body = { message: text, sessionId: current.id };
+    if (image) body.image = { data: image.data, mediaType: image.mediaType };
+    await stream(CHAT_URL, body, image ? "Analyserer bilde …" : "Søker i manualer …");
+  }
+
+  function updateSend() { sendBtn.disabled = busy || (!input.value.trim() && !pendingImage); }
+  function autosize() { input.style.height = "auto"; input.style.height = Math.min(input.scrollHeight, 200) + "px"; }
+  input.addEventListener("input", () => { autosize(); updateSend(); });
+  input.addEventListener("keydown", (e) => {
+    if (e.key === "Enter" && !e.shiftKey && !e.isComposing) { e.preventDefault(); send(); }
+  });
+  sendBtn.addEventListener("click", send);
+
+  // ---------- Image upload ----------
+  $("attach").addEventListener("click", () => $("file").click());
+  $("img-remove").addEventListener("click", clearImage);
+  function clearImage() {
+    pendingImage = null;
+    $("file").value = "";
+    $("img-preview").style.display = "none";
+    updateSend();
+  }
+  function resizeImage(file) {
+    return new Promise((resolve) => {
+      const img = new Image();
+      const url = URL.createObjectURL(file);
+      img.onload = () => {
+        URL.revokeObjectURL(url);
+        const MAX = 1200;
+        let { width, height } = img;
+        if (width > MAX || height > MAX) {
+          if (width > height) { height = Math.round(height * MAX / width); width = MAX; }
+          else { width = Math.round(width * MAX / height); height = MAX; }
+        }
+        const canvas = document.createElement("canvas");
+        canvas.width = width; canvas.height = height;
+        canvas.getContext("2d").drawImage(img, 0, 0, width, height);
+        const dataUrl = canvas.toDataURL("image/jpeg", 0.85);
+        resolve({ data: dataUrl.split(",")[1], mediaType: "image/jpeg", previewUrl: dataUrl });
+      };
+      img.src = url;
+    });
+  }
+  $("file").addEventListener("change", async (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+    pendingImage = await resizeImage(file);
+    $("img-thumb").src = pendingImage.previewUrl;
+    $("img-name").textContent = file.name;
+    $("img-preview").style.display = "flex";
+    updateSend();
+    input.focus();
+  });
+
+  startNewChat();
+})();
+</script>
+</body>
+</html>

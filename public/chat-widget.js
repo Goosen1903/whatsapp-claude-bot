@@ -3,6 +3,21 @@
   const PRIMARY = "#1B2563";
   const SESSION_KEY = "rr_chat_session";
   const HISTORY_KEY = "rr_chat_history";
+  const MODE_KEY = "rr_chat_mode";
+
+  // Robot advisor survey. "multi" questions allow several answers; "text" is an optional free-text field.
+  const SURVEY = [
+    { id: "building", q: "Hva slags lokaler skal rengjøres?", options: ["Kontor", "Lager / logistikk", "Produksjon / industri", "Butikk / kjøpesenter", "Sykehus / helse", "Skole / barnehage", "Hotell", "Flyplass / stasjon", "Utendørs område", "Annet"] },
+    { id: "area", q: "Omtrent hvor stort areal skal roboten rengjøre?", options: ["Under 500 m²", "500–1 500 m²", "1 500–3 000 m²", "3 000–6 000 m²", "Over 6 000 m²"] },
+    { id: "floors", q: "Hvilke gulvtyper har dere?", multi: true, options: ["Teppe", "Vinyl / linoleum", "Fliser / stein", "Betong / epoxy", "Tre / parkett", "Asfalt / utendørs"] },
+    { id: "needs", q: "Hva slags rengjøring trenger dere?", multi: true, options: ["Støvsuging", "Feiing av grovt smuss", "Våtvask / skuring", "Tørrmopping", "Vet ikke – anbefal"] },
+    { id: "dirt", q: "Hvordan vil du beskrive smusset?", options: ["Lett – støv og fotspor", "Middels – daglig trafikk og søl", "Tungt – grus, sagflis, emballasje, olje"] },
+    { id: "layout", q: "Hvordan er lokalene lagt opp?", options: ["Store, åpne flater", "Blanding av åpne flater og korridorer", "Mange smale korridorer og møblerte rom"] },
+    { id: "levels", q: "Skal roboten jobbe på flere etasjer?", options: ["Nei, én etasje", "Ja, og vi har heis", "Ja, men uten heis"] },
+    { id: "timing", q: "Når skal rengjøringen skje?", options: ["Utenfor åpningstid", "I åpningstid, med folk og trafikk rundt", "Begge deler"] },
+    { id: "frequency", q: "Hvor ofte skal det rengjøres?", options: ["Flere ganger daglig", "Daglig", "Noen ganger i uken"] },
+    { id: "notes", q: "Er det noe annet vi bør vite?", text: true, placeholder: "F.eks. terskler, ramper, trange døråpninger, spesielle krav …" },
+  ];
 
   function getSessionId() {
     let id = localStorage.getItem(SESSION_KEY);
@@ -103,9 +118,53 @@
     #rr-chat-messages::-webkit-scrollbar { width: 4px; }
     #rr-chat-messages::-webkit-scrollbar-track { background: transparent; }
     #rr-chat-messages::-webkit-scrollbar-thumb { background: rgba(0,0,0,0.1); border-radius: 2px; }
+    .rr-panel {
+      padding: 16px; border-top: 1px solid rgba(0,0,0,0.07); flex-shrink: 0;
+      background: #f8f9fc; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    }
+    .rr-panel p { font-size: 13px; font-weight: 600; color: #1a1a1a; margin: 0 0 10px 0; }
+    #rr-intent-grid { display: flex; flex-direction: column; gap: 8px; }
+    .rr-intent-btn {
+      background: #fff; border: 1.5px solid #ddd; border-radius: 12px;
+      padding: 12px 14px; cursor: pointer; text-align: left; font-family: inherit;
+      display: flex; align-items: center; gap: 12px; color: #1a1a1a;
+      transition: border-color 0.15s, background 0.15s;
+    }
+    .rr-intent-btn:hover { border-color: ${PRIMARY}; background: #f0f2fa; }
+    .rr-intent-btn .rr-intent-icon { font-size: 24px; flex-shrink: 0; }
+    .rr-intent-btn .rr-intent-label { display: block; font-weight: 600; font-size: 14px; }
+    .rr-intent-btn .rr-intent-sub { display: block; font-size: 12px; color: #666; margin-top: 2px; }
+    #rr-survey { display: none; max-height: 70%; overflow-y: auto; }
+    #rr-survey-top { display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px; }
+    #rr-survey-back {
+      background: none; border: none; color: #666; cursor: pointer; font-size: 12px;
+      padding: 2px 0; font-family: inherit;
+    }
+    #rr-survey-back:hover { color: ${PRIMARY}; }
+    #rr-survey-step { font-size: 11px; color: #888; }
+    #rr-survey-progress { height: 3px; background: #e3e6ef; border-radius: 2px; margin-bottom: 12px; overflow: hidden; }
+    #rr-survey-progress div { height: 100%; background: ${PRIMARY}; transition: width 0.25s; }
+    #rr-survey-options { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-bottom: 10px; }
+    #rr-survey-options .rr-model-btn { font-size: 12.5px; }
+    #rr-survey-text {
+      width: 100%; box-sizing: border-box; border: 1.5px solid #ddd; border-radius: 10px;
+      padding: 8px 10px; font-size: 13px; font-family: inherit; resize: none; margin-bottom: 10px;
+    }
+    #rr-survey-text:focus { outline: none; border-color: ${PRIMARY}; }
+    #rr-survey-next {
+      width: 100%; background: ${PRIMARY}; color: #fff; border: none;
+      border-radius: 10px; padding: 10px; font-size: 14px; font-weight: 600;
+      cursor: pointer; font-family: inherit; transition: opacity 0.2s;
+    }
+    #rr-survey-next:disabled { opacity: 0.35; cursor: default; }
+    .rr-back-link {
+      background: none; border: none; color: #666; cursor: pointer; font-size: 12px;
+      padding: 0; margin-bottom: 8px; font-family: inherit;
+    }
+    .rr-back-link:hover { color: ${PRIMARY}; }
     #rr-model-picker {
       padding: 16px; border-top: 1px solid rgba(0,0,0,0.07); flex-shrink: 0;
-      background: #f8f9fc;
+      background: #f8f9fc; display: none;
     }
     #rr-model-picker p {
       font-size: 13px; font-weight: 600; color: #1a1a1a; margin: 0 0 10px 0;
@@ -243,7 +302,7 @@
   bubbleWrap.innerHTML = `
     <div id="rr-chat-teaser">
       <button id="rr-teaser-close">✕</button>
-      Har du spørsmål om robotene dine? 🤖
+      Trenger du hjelp med en robot – eller vil du finne den som passer for dere? 🤖
     </div>
     <button id="rr-chat-bubble">💬</button>
   `;
@@ -269,7 +328,7 @@
     <div id="rr-chat-header">
       <img src="https://api.readyrobotics.no/logo.png" alt="Ready Robotics" onerror="this.style.display='none'">
       <div id="rr-chat-header-title">
-        <span>Support</span>
+        <span id="rr-chat-title">Support</span>
         <small>Ready Robotics</small>
       </div>
       <div id="rr-chat-header-actions">
@@ -278,7 +337,34 @@
       </div>
     </div>
     <div id="rr-chat-messages"></div>
+    <div id="rr-intent-picker" class="rr-panel">
+      <p>Hei! Hva kan vi hjelpe deg med?</p>
+      <div id="rr-intent-grid">
+        <button class="rr-intent-btn" data-intent="support">
+          <span class="rr-intent-icon">🛠️</span>
+          <span><span class="rr-intent-label">Hjelp med roboten vår</span>
+          <span class="rr-intent-sub">Drift, feilmeldinger, vedlikehold og reservedeler</span></span>
+        </button>
+        <button class="rr-intent-btn" data-intent="advisor">
+          <span class="rr-intent-icon">🔍</span>
+          <span><span class="rr-intent-label">Finn riktig robot for oss</span>
+          <span class="rr-intent-sub">Svar på noen korte spørsmål og få en anbefaling</span></span>
+        </button>
+      </div>
+    </div>
+    <div id="rr-survey" class="rr-panel">
+      <div id="rr-survey-top">
+        <button id="rr-survey-back">← Tilbake</button>
+        <span id="rr-survey-step"></span>
+      </div>
+      <div id="rr-survey-progress"><div></div></div>
+      <p id="rr-survey-q"></p>
+      <div id="rr-survey-options"></div>
+      <textarea id="rr-survey-text" rows="3"></textarea>
+      <button id="rr-survey-next">Neste →</button>
+    </div>
     <div id="rr-model-picker">
+      <button class="rr-back-link" id="rr-model-back">← Tilbake</button>
       <p>Hvilken robot gjelder det?</p>
       <div id="rr-model-grid">
         <button class="rr-model-btn" data-model="Omnie">Omnie</button>
@@ -327,8 +413,126 @@
   const modelPicker = win.querySelector("#rr-model-picker");
   const modelConfirm = win.querySelector("#rr-model-confirm");
   const rolePicker = win.querySelector("#rr-role-picker");
+  const intentPicker = win.querySelector("#rr-intent-picker");
+  const surveyPanel = win.querySelector("#rr-survey");
+  const surveyQ = win.querySelector("#rr-survey-q");
+  const surveyStep = win.querySelector("#rr-survey-step");
+  const surveyBar = win.querySelector("#rr-survey-progress div");
+  const surveyOptions = win.querySelector("#rr-survey-options");
+  const surveyText = win.querySelector("#rr-survey-text");
+  const surveyNext = win.querySelector("#rr-survey-next");
+  const surveyBack = win.querySelector("#rr-survey-back");
+  const chatTitle = win.querySelector("#rr-chat-title");
   let selectedModel = null;
   let selectedRole = null;
+  let surveyIndex = 0;
+  let surveyAnswers = {};
+
+  function setMode(mode) {
+    localStorage.setItem(MODE_KEY, mode);
+    chatTitle.textContent = mode === "advisor" ? "Robotrådgiver" : "Support";
+  }
+
+  win.querySelectorAll(".rr-intent-btn").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      intentPicker.style.display = "none";
+      setMode(btn.dataset.intent);
+      if (btn.dataset.intent === "advisor") {
+        surveyIndex = 0;
+        surveyAnswers = {};
+        surveyPanel.style.display = "block";
+        renderSurvey();
+      } else {
+        modelPicker.style.display = "block";
+      }
+    });
+  });
+
+  win.querySelector("#rr-model-back").addEventListener("click", () => {
+    modelPicker.style.display = "none";
+    intentPicker.style.display = "";
+  });
+
+  function renderSurvey() {
+    const step = SURVEY[surveyIndex];
+    const isLast = surveyIndex === SURVEY.length - 1;
+    surveyQ.textContent = step.q + (step.multi ? " (velg en eller flere)" : "");
+    surveyStep.textContent = `${surveyIndex + 1} av ${SURVEY.length}`;
+    surveyBar.style.width = `${(surveyIndex / SURVEY.length) * 100}%`;
+    surveyOptions.innerHTML = "";
+    surveyOptions.style.display = step.text ? "none" : "";
+    surveyText.style.display = step.text ? "block" : "none";
+    // Single-choice questions advance on click, so they only need the button to confirm a previous answer
+    surveyNext.style.display = step.multi || step.text || surveyAnswers[step.id] ? "" : "none";
+    surveyNext.textContent = isLast ? "Få anbefaling →" : "Neste →";
+
+    if (step.text) {
+      surveyText.placeholder = step.placeholder || "";
+      surveyText.value = surveyAnswers[step.id] || "";
+      surveyNext.disabled = false;
+      surveyText.focus();
+      return;
+    }
+
+    const current = [].concat(surveyAnswers[step.id] || []);
+    step.options.forEach((opt) => {
+      const b = document.createElement("button");
+      b.className = "rr-model-btn" + (current.includes(opt) ? " selected" : "");
+      b.textContent = opt;
+      b.addEventListener("click", () => {
+        if (step.multi) {
+          b.classList.toggle("selected");
+          const picked = [...surveyOptions.querySelectorAll(".selected")].map((x) => x.textContent);
+          surveyAnswers[step.id] = picked;
+          surveyNext.disabled = picked.length === 0;
+        } else {
+          surveyAnswers[step.id] = opt;
+          advanceSurvey();
+        }
+      });
+      surveyOptions.appendChild(b);
+    });
+    surveyNext.disabled = current.length === 0;
+  }
+
+  function advanceSurvey() {
+    const step = SURVEY[surveyIndex];
+    if (step.text) surveyAnswers[step.id] = surveyText.value.trim();
+    if (surveyIndex < SURVEY.length - 1) {
+      surveyIndex++;
+      renderSurvey();
+    } else {
+      finishSurvey();
+    }
+  }
+
+  surveyNext.addEventListener("click", advanceSurvey);
+  surveyBack.addEventListener("click", () => {
+    if (surveyIndex === 0) {
+      surveyPanel.style.display = "none";
+      intentPicker.style.display = "";
+      return;
+    }
+    surveyIndex--;
+    renderSurvey();
+  });
+
+  async function finishSurvey() {
+    surveyPanel.style.display = "none";
+    const answers = SURVEY
+      .map((step) => {
+        const a = [].concat(surveyAnswers[step.id] || []).join(", ");
+        return a ? { question: step.q, answer: a } : null;
+      })
+      .filter(Boolean);
+    const summary = "Mine svar:\n" + answers.map((a) => `${a.question} ${a.answer}`).join("\n");
+    appendMessage("user", summary);
+    history.push({ role: "user", text: summary });
+    sendBtn.disabled = true;
+    await streamInto(RECOMMEND_URL, { sessionId, answers }, "Finner riktig robot…");
+    sendBtn.disabled = false;
+    input.focus();
+  }
 
   win.querySelectorAll(".rr-model-btn").forEach((btn) => {
     btn.addEventListener("click", () => {
@@ -393,15 +597,20 @@
     modelConfirm.classList.remove("active");
     modelConfirm.setAttribute("disabled", true);
     rolePicker.style.display = "none";
-    modelPicker.style.display = "";
+    modelPicker.style.display = "none";
+    surveyPanel.style.display = "none";
+    intentPicker.style.display = "";
+    localStorage.removeItem(MODE_KEY);
+    chatTitle.textContent = "Support";
   });
 
   let sessionId = getSessionId();
   const history = loadHistory();
 
   if (history.length > 0) {
-    modelPicker.style.display = "none";
+    intentPicker.style.display = "none";
     history.forEach(({ role, text }) => appendMessage(role, text));
+    if (localStorage.getItem(MODE_KEY) === "advisor") chatTitle.textContent = "Robotrådgiver";
   }
 
   bubble.addEventListener("click", () => {
@@ -475,6 +684,7 @@
   });
 
   const FEEDBACK_URL = API_URL.replace("/chat", "/feedback");
+  const RECOMMEND_URL = API_URL.replace("/chat", "/recommend");
 
   function addFeedback(msgDiv, messageText) {
     const msgId = Date.now().toString(36);
@@ -579,16 +789,24 @@
     imgPreview.style.display = "none";
     attachBtn.classList.remove("has-image");
 
+    const body = { message: text, sessionId };
+    if (imageToSend) body.image = { data: imageToSend.data, mediaType: imageToSend.mediaType };
+    await streamInto(API_URL, body, imageToSend ? "Analyserer bilde…" : "Søker i manualer…");
+
+    sendBtn.disabled = false;
+    input.focus();
+  }
+
+  // POST to a streaming endpoint and render the reply as it arrives
+  async function streamInto(url, body, statusLabel) {
     const statusDiv = document.createElement("div");
     statusDiv.className = "rr-typing-status";
-    statusDiv.innerHTML = `<span class="rr-typing-dot"></span><span class="rr-typing-label">${imageToSend ? "Analyserer bilde…" : "Søker i manualer…"}</span>`;
+    statusDiv.innerHTML = `<span class="rr-typing-dot"></span><span class="rr-typing-label">${statusLabel}</span>`;
     messages.appendChild(statusDiv);
     messages.scrollTop = messages.scrollHeight;
 
     try {
-      const body = { message: text, sessionId };
-      if (imageToSend) body.image = { data: imageToSend.data, mediaType: imageToSend.mediaType };
-      const res = await fetch(API_URL, {
+      const res = await fetch(url, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(body),
@@ -597,10 +815,9 @@
       if (res.status === 429) {
         statusDiv.remove();
         appendMessage("bot", "Du har sendt for mange meldinger. Vent litt før du prøver igjen.");
-        sendBtn.disabled = false;
-        input.focus();
         return;
       }
+      if (!res.ok) throw new Error(res.status);
 
       const streamDiv = document.createElement("div");
       streamDiv.className = "rr-msg bot";
@@ -645,8 +862,5 @@
       statusDiv.remove();
       appendMessage("bot", "Kunne ikke nå serveren. Prøv igjen.");
     }
-
-    sendBtn.disabled = false;
-    input.focus();
   }
 })();

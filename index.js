@@ -4,6 +4,7 @@ import fs from "fs";
 import path from "path";
 import { loadDocuments, loadWebSources, searchChunks, getPageScreenshot, DATA_DIR } from "./rag.js";
 import { ensurePDFs } from "./download-pdfs.js";
+import { ROBOT_PROFILES } from "./robot-profiles.js";
 import "dotenv/config";
 
 const app = express();
@@ -26,6 +27,7 @@ fs.mkdirSync(DATA_DIR, { recursive: true });
 const CONVERSATIONS_FILE = path.join(DATA_DIR, "conversations.json");
 const ANALYTICS_FILE = path.join(DATA_DIR, "analytics.jsonl");
 const FEEDBACK_FILE = path.join(DATA_DIR, "feedback.jsonl");
+const ADVISOR_FILE = path.join(DATA_DIR, "advisor.jsonl");
 const ANALYTICS_PASSWORD = process.env.ANALYTICS_PASSWORD || "readyrobotics";
 const DIGEST_KEY = process.env.DIGEST_KEY || ANALYTICS_PASSWORD;
 const RESEND_API_KEY = process.env.RESEND_API_KEY;
@@ -35,6 +37,8 @@ const conversations = {};
 const webConversations = {};
 const sessionModels = {};
 const sessionRoles = {};
+const sessionModes = {};   // "advisor" for robot-recommendation sessions, otherwise support
+const sessionSurveys = {}; // advisor survey answers per session
 
 // Load persisted conversations on startup
 function loadConversations() {
@@ -45,6 +49,8 @@ function loadConversations() {
       Object.assign(webConversations, data.web || {});
       Object.assign(sessionModels, data.sessionModels || {});
       Object.assign(sessionRoles, data.sessionRoles || {});
+      Object.assign(sessionModes, data.sessionModes || {});
+      Object.assign(sessionSurveys, data.sessionSurveys || {});
       console.log(`Loaded conversations: ${Object.keys(conversations).length} WA, ${Object.keys(webConversations).length} web sessions`);
     }
   } catch (err) {
@@ -56,7 +62,7 @@ let saveTimer;
 function saveConversations() {
   clearTimeout(saveTimer);
   saveTimer = setTimeout(() => {
-    fs.writeFile(CONVERSATIONS_FILE, JSON.stringify({ whatsapp: conversations, web: webConversations, sessionModels, sessionRoles }), () => {});
+    fs.writeFile(CONVERSATIONS_FILE, JSON.stringify({ whatsapp: conversations, web: webConversations, sessionModels, sessionRoles, sessionModes, sessionSurveys }), () => {});
   }, 2000);
 }
 
@@ -77,6 +83,78 @@ function isRateLimited(sessionId) {
   rateLimits[sessionId].push(now);
   return false;
 }
+
+function buildContext(chunks) {
+  return chunks.length > 0
+    ? chunks.map((c) => c.webUrl
+        ? `[From: ${c.source} | Link: ${c.webUrl}]\n${c.text}`
+        : `[From: ${c.source}, page ${c.page} | Link: ${PUBLIC_URL}/pdfs/${encodeURIComponent(c.source)}#page=${c.page}]\n${c.text}`
+      ).join("\n\n")
+    : "No relevant documents found.";
+}
+
+// Stream a Claude reply to the client as server-sent events; resolves with the full text
+async function streamReply(res, system, messages) {
+  res.setHeader("Content-Type", "text/event-stream");
+  res.setHeader("Cache-Control", "no-cache");
+  res.setHeader("X-Accel-Buffering", "no");
+
+  let reply = "";
+  const stream = anthropic.messages.stream({
+    model: "claude-sonnet-4-6",
+    max_tokens: 1024,
+    system,
+    messages,
+  });
+  stream.on("text", (text) => {
+    reply += text;
+    res.write(`data: ${JSON.stringify({ text })}\n\n`);
+  });
+  await stream.finalMessage();
+  res.write("data: [DONE]\n\n");
+  res.end();
+  return reply;
+}
+
+function formatSurvey(answers) {
+  return answers.map((a) => `- ${a.question} ${a.answer}`).join("\n");
+}
+
+function advisorSystemPrompt(survey, context) {
+  return `You are a friendly, knowledgeable sales advisor for Ready Robotics, a Norwegian reseller of Gausium autonomous cleaning robots. You help potential customers find out which robot (or combination of robots) best fits their facility.
+
+LANGUAGE RULE (most important rule): Always reply in the exact same language as the user's most recent message. The survey answers are in Norwegian, so the first recommendation should be in Norwegian.
+
+THE CUSTOMER'S SURVEY ANSWERS:
+${survey}
+
+PRODUCT PROFILES (the only robots you may recommend):
+${ROBOT_PROFILES}
+
+HOW TO RECOMMEND:
+- Recommend one primary robot, including version where relevant (e.g. Omnie roller brush vs. disc brush, Beetle vs. Beetle Pro). Mention one alternative or a combination only if it genuinely fits better (e.g. Beetle for debris + Omnie for scrubbing, or Phantas where there is carpet).
+- Explain briefly why, tied directly to their answers: floor types, area, building type, dirt level, layout, floors/elevator and when cleaning happens.
+- Hard constraints: only Phantas vacuums carpet. Scrubber 50 and Omnie are hard floor only. Beetle only sweeps (no wet cleaning) and is the choice for heavy debris, warehouses and outdoor areas. Narrow corridors favour compact robots (Mira, Phantas).
+- Capacity: real-world efficiency is roughly 50 % of the theoretical figure (turns, obstacles, people). Use that together with runtime to estimate whether one robot is enough for their area and frequency, and suggest the number of units if more are needed. Be clear that this is an estimate.
+- Multiple floors without an elevator means one robot per floor or manual moving; with an elevator, mention elevator integration.
+- Never quote prices. Do not invent specs that are not in the profiles or context.
+- If a key detail is missing or unclear, make a reasonable assumption and say so, instead of asking many questions.
+- End by offering a free site assessment or demo: info@readyrobotics.no or 40282444.
+
+FOLLOW-UP QUESTIONS: Answer questions about the robots using the profiles and the manual context below. If the answer is not available, say so and refer to Ready Robotics.
+
+TONE AND FORMATTING:
+- Warm, direct and practical, like an experienced advisor. No sales fluff.
+- Plain text only, no markdown, no asterisks, no bullet symbols. Short paragraphs.
+- First recommendation: around 150–200 words. Follow-up answers: around 100 words.
+- Always finish your last sentence naturally.
+
+CONTEXT FROM MANUALS:
+${context}`;
+}
+
+// Full-page support chat (embedded on the website's "Support bot" page)
+app.get("/support", (_req, res) => res.sendFile(path.resolve("public/support.html")));
 
 app.get("/webhook", (req, res) => {
   const mode = req.query["hub.mode"];
@@ -113,6 +191,44 @@ app.options("/chat", (_req, res) => {
   res.sendStatus(204);
 });
 
+app.options("/recommend", (_req, res) => {
+  res.setHeader("Access-Control-Allow-Origin", "*");
+  res.setHeader("Access-Control-Allow-Headers", "Content-Type");
+  res.sendStatus(204);
+});
+
+// Robot advisor: takes survey answers, streams a recommendation, and switches the session to advisor mode
+app.post("/recommend", async (req, res) => {
+  res.setHeader("Access-Control-Allow-Origin", "*");
+  const { sessionId, answers } = req.body;
+  if (!sessionId || !Array.isArray(answers) || answers.length === 0) return res.status(400).json({ error: "Missing sessionId or answers" });
+  if (isRateLimited(sessionId)) return res.status(429).json({ error: "Too many messages. Please wait before sending more." });
+
+  const cleanAnswers = answers.slice(0, 20).map((a) => ({
+    question: String(a.question || "").slice(0, 200),
+    answer: String(a.answer || "").slice(0, 1000),
+  }));
+  const survey = formatSurvey(cleanAnswers);
+  sessionModes[sessionId] = "advisor";
+  sessionSurveys[sessionId] = survey;
+  fs.appendFile(ADVISOR_FILE, JSON.stringify({ ts: new Date().toISOString(), sessionId, answers: cleanAnswers }) + "\n", () => {});
+
+  try {
+    const userMessage = `Her er svarene mine. Hvilken robot passer best for oss?\n\n${survey}`;
+    webConversations[sessionId] = [{ role: "user", content: userMessage }];
+    const reply = await streamReply(res, advisorSystemPrompt(survey, "No manual context needed for the first recommendation."), [
+      { role: "user", content: userMessage },
+    ]);
+    webConversations[sessionId].push({ role: "assistant", content: reply });
+    logQuery("advisor", "[robotanbefaling]", true);
+    saveConversations();
+  } catch (err) {
+    console.error("[RECOMMEND ERROR]", err);
+    if (!res.headersSent) res.status(500).json({ error: "Failed to create recommendation" });
+    else res.end();
+  }
+});
+
 app.options("/feedback", (_req, res) => {
   res.setHeader("Access-Control-Allow-Origin", "*");
   res.setHeader("Access-Control-Allow-Headers", "Content-Type");
@@ -146,13 +262,7 @@ app.post("/chat", async (req, res) => {
 
   try {
     const searchQuery = message ? await extractSearchKeywords(message) : "robot del komponent vedlikehold feil";
-    const relevantChunks = searchChunks(searchQuery);
-    const context = relevantChunks.length > 0
-      ? relevantChunks.map((c) => c.webUrl
-          ? `[From: ${c.source} | Link: ${c.webUrl}]\n${c.text}`
-          : `[From: ${c.source}, page ${c.page} | Link: ${PUBLIC_URL}/pdfs/${encodeURIComponent(c.source)}#page=${c.page}]\n${c.text}`
-        ).join("\n\n")
-      : "No relevant documents found.";
+    const context = buildContext(searchChunks(searchQuery));
 
     if (!webConversations[sessionId]) webConversations[sessionId] = [];
     // Store text-only in history (images are not persisted to save memory)
@@ -173,7 +283,9 @@ app.post("/chat", async (req, res) => {
 
     const selectedModel = sessionModels[sessionId];
     const selectedRole = sessionRoles[sessionId];
-    const systemPrompt = `You are a friendly and knowledgeable support assistant for Ready Robotics, a Norwegian reseller of Gausium autonomous cleaning robots (Mira, Omnie, Scrubber 50, and Phantas models).
+    const systemPrompt = sessionModes[sessionId] === "advisor"
+      ? advisorSystemPrompt(sessionSurveys[sessionId] || "(no survey answers)", context)
+      : `You are a friendly and knowledgeable support assistant for Ready Robotics, a Norwegian reseller of Gausium autonomous cleaning robots (Mira, Omnie, Scrubber 50, and Phantas models).
 ${selectedModel ? `\nSELECTED MODEL: The user has selected "${selectedModel}". Always treat all questions as being about ${selectedModel} unless they explicitly ask about a different model.\n` : ""}${selectedRole === "servicetekniker" ? `\nUSER ROLE: Service technician. Use precise technical language. Include component names, error codes, torque specs, and detailed step-by-step procedures. Assume technical knowledge.\n` : ""}${selectedRole === "renholder" || selectedRole === "renholder/placemaker" ? `\nUSER ROLE: Cleaner/Placemaker (robot operator). Use simple, clear language. Focus on daily operation, cleaning routines, and basic troubleshooting. Avoid unnecessary technical jargon.\n` : ""}
 LANGUAGE RULE (most important rule): Always reply in the exact same language as the user's most recent message. If Norwegian, reply in Norwegian. If English, reply in English.
 
@@ -225,31 +337,11 @@ FORMATTING:
 CONTEXT FROM MANUALS:
 ${context}`;
 
-    // Stream response to client
-    res.setHeader("Content-Type", "text/event-stream");
-    res.setHeader("Cache-Control", "no-cache");
-    res.setHeader("X-Accel-Buffering", "no");
-
-    let reply = "";
-    const stream = anthropic.messages.stream({
-      model: "claude-sonnet-4-6",
-      max_tokens: 1024,
-      system: systemPrompt,
-      messages: history,
-    });
-
-    stream.on("text", (text) => {
-      reply += text;
-      res.write(`data: ${JSON.stringify({ text })}\n\n`);
-    });
-
-    await stream.finalMessage();
-    res.write("data: [DONE]\n\n");
-    res.end();
+    const reply = await streamReply(res, systemPrompt, history);
 
     webConversations[sessionId].push({ role: "assistant", content: reply });
     const answerable = !reply.toLowerCase().includes("don't have") && !reply.toLowerCase().includes("ikke har");
-    logQuery("web", message, answerable);
+    logQuery(sessionModes[sessionId] === "advisor" ? "advisor" : "web", message, answerable);
     saveConversations();
   } catch (err) {
     console.error("[CHAT ERROR]", err);
@@ -268,6 +360,11 @@ app.get("/analytics", (req, res) => {
   const unanswered = entries.filter(e => !e.answerable).length;
   const bySource = entries.reduce((acc, e) => { acc[e.source] = (acc[e.source] || 0) + 1; return acc; }, {});
   const recent = entries.slice(-50).reverse();
+  const surveys = fs.existsSync(ADVISOR_FILE)
+    ? fs.readFileSync(ADVISOR_FILE, "utf8").trim().split("\n").filter(Boolean)
+        .map(l => { try { return JSON.parse(l); } catch { return null; } }).filter(Boolean).slice(-30).reverse()
+    : [];
+  const esc = (s) => String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
 
   res.send(`<!DOCTYPE html><html><head><title>Analytics</title>
   <style>body{font-family:sans-serif;max-width:900px;margin:40px auto;padding:0 20px;color:#1a1a1a}
@@ -285,6 +382,10 @@ app.get("/analytics", (req, res) => {
   <h2>Recent questions</h2>
   <table><tr><th>Time</th><th>Source</th><th>Question</th><th>Answered</th></tr>
   ${recent.map(e => `<tr><td>${new Date(e.ts).toLocaleString("no-NO")}</td><td>${e.source}</td><td>${e.question}</td><td>${e.answerable ? "✅" : "❌"}</td></tr>`).join("")}
+  </table>
+  <h2>Robotrådgiver — siste undersøkelser (${surveys.length})</h2>
+  <table><tr><th>Time</th><th>Svar</th></tr>
+  ${surveys.map(s => `<tr><td style="white-space:nowrap;vertical-align:top">${new Date(s.ts).toLocaleString("no-NO")}</td><td>${s.answers.map(a => `<b>${esc(a.question)}</b> ${esc(a.answer)}`).join("<br>")}</td></tr>`).join("")}
   </table></body></html>`);
 });
 
